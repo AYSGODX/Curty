@@ -170,32 +170,16 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(Set(CalendarStore.Horizon.allCases.map(\.title)), ["Сутки", "Неделя"])
     }
 
-    func testOverlayIsARiseAboveTheRestingDockWindowCount() {
-        var watch = DockOverlayWatch()
+    func testOverlayThresholdClearsEveryMeasuredDesktopState() {
+        // Measured on this platform. A threshold that suppressed the middle
+        // case is what left the notch dead on a bare desktop.
+        let appCoversScreen = 0
+        let bareDesktop = 1
+        let missionControl = 3
 
-        // The very first observation only establishes what "resting" means.
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 0))
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 1))
-
-        // Mission Control stacks more windows on top of that.
-        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 3, now: 2))
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 3))
-
-        // A desktop that simply keeps fewer windows lowers the resting count.
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 0, now: 4))
-        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 5))
-    }
-
-    func testPersistentlyHigherCountBecomesTheNewResting() {
-        var watch = DockOverlayWatch()
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 0))
-
-        // A count that never comes back down is the system's new normal, not an
-        // overlay: this is what keeps the notch from being blocked forever.
-        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 4, now: 1))
-        let settled = 1 + DockOverlayWatch.settleInterval
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 4, now: settled))
-        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 4, now: settled + 1))
+        XCTAssertLessThan(appCoversScreen, SystemOverlayPolicy.overlayWindowCount)
+        XCTAssertLessThan(bareDesktop, SystemOverlayPolicy.overlayWindowCount)
+        XCTAssertGreaterThanOrEqual(missionControl, SystemOverlayPolicy.overlayWindowCount)
     }
 
     func testOverlayWindowMustCoverMostOfTheDisplay() {

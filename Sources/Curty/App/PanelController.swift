@@ -43,48 +43,22 @@ enum PanelInteractionPolicy {
     }
 }
 
-/// Mission Control does not create a window of its own kind — it stacks extra
-/// full-screen windows on top of the ones the Dock already keeps whenever the
-/// wallpaper is visible. Hard-coding how many there should be is what left the
-/// notch dead on a bare desktop, so the resting count is learned instead and
-/// only a rise above it reads as an overlay. Should a system update make the
-/// higher count normal, it settles into the new baseline and suppression stops
-/// by itself; the notch can never stay blocked.
-struct DockOverlayWatch {
-    /// How long an elevated count may persist before it is accepted as normal.
-    /// Only time spent with the cursor in the notch counts towards it.
-    static let settleInterval: TimeInterval = 8
-
-    private var restingCount: Int?
-    private var elevatedSince: TimeInterval?
-
-    mutating func isOverlayPresent(fullScreenDockWindows count: Int, now: TimeInterval) -> Bool {
-        guard let resting = restingCount else {
-            restingCount = count
-            return false
-        }
-
-        if count <= resting {
-            restingCount = count
-            elevatedSince = nil
-            return false
-        }
-
-        let since = elevatedSince ?? now
-        elevatedSince = since
-        guard now - since < Self.settleInterval else {
-            restingCount = count
-            elevatedSince = nil
-            return false
-        }
-        return true
-    }
-}
-
 /// Counts on-screen windows the Dock draws over most of the display. Geometry
 /// and owner only — no titles, no contents, no screen capture.
 enum SystemOverlayPolicy {
     static let coverageThreshold: CGFloat = 0.5
+
+    /// Measured on this platform: no screen-covering Dock window while an app
+    /// covers the display, exactly one whenever the wallpaper is visible (the
+    /// click catcher), and three under Mission Control. Two is therefore the
+    /// first count that cannot be an ordinary desktop.
+    static let overlayWindowCount = 2
+
+    /// How long suppression may last before the count is treated as this Mac's
+    /// normal rather than an overlay. Only time with the cursor in the notch
+    /// counts, so ordinary use never reaches it — this exists so a system whose
+    /// resting count differs from the measured one cannot leave the notch dead.
+    static let giveUpInterval: TimeInterval = 10
 
     static func coversDisplay(width: CGFloat, height: CGFloat, screenSize: CGSize) -> Bool {
         let screenArea = screenSize.width * screenSize.height
@@ -123,9 +97,9 @@ final class PanelController {
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var screenObserver: NSObjectProtocol?
-    private var overlayWatch = DockOverlayWatch()
     private var overlayCheckedAt: TimeInterval = 0
     private var overlayWasVisible = false
+    private var suppressingSince: TimeInterval?
     private var awaitsCursorArrival = false
 
     private let panelSize = NSSize(width: 488, height: 420)
@@ -272,10 +246,17 @@ final class PanelController {
         let now = ProcessInfo.processInfo.systemUptime
         if now - overlayCheckedAt < 0.2 { return overlayWasVisible }
         overlayCheckedAt = now
-        overlayWasVisible = overlayWatch.isOverlayPresent(
-            fullScreenDockWindows: SystemOverlayPolicy.fullScreenDockWindowCount(screenSize: screen.frame.size),
-            now: now
-        )
+
+        let count = SystemOverlayPolicy.fullScreenDockWindowCount(screenSize: screen.frame.size)
+        guard count >= SystemOverlayPolicy.overlayWindowCount else {
+            suppressingSince = nil
+            overlayWasVisible = false
+            return false
+        }
+
+        let since = suppressingSince ?? now
+        suppressingSince = since
+        overlayWasVisible = now - since < SystemOverlayPolicy.giveUpInterval
         return overlayWasVisible
     }
 
