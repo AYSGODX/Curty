@@ -3,6 +3,7 @@ import SwiftUI
 struct PanelRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: AppModel
+    @State private var dropTarget: AppModel.Tool?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -37,7 +38,7 @@ struct PanelRootView: View {
 
             Spacer().frame(height: 3)
 
-            ForEach(AppModel.Tool.primary) { section in
+            ForEach(model.orderedTools) { section in
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) {
                         model.select(section)
@@ -54,10 +55,36 @@ struct PanelRootView: View {
                         // A frame alone is not hit-testable where it is transparent,
                         // so without this only the glyph itself answered the click.
                         .contentShape(Rectangle())
+                        .overlay(alignment: .top) {
+                            if dropTarget == section {
+                                Capsule()
+                                    .fill(CurtyTheme.accent)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, 4)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .help(section.title)
                 .accessibilityLabel(section.title)
+                // A click carries no movement, so it still selects; the system
+                // only starts a drag once the pointer passes its own threshold.
+                .onDrag { NSItemProvider(object: section.rawValue as NSString) }
+                .dropDestination(for: String.self) { items, _ in
+                    dropTarget = nil
+                    guard let raw = items.first,
+                          let moved = AppModel.Tool(rawValue: raw) else { return false }
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        model.moveTool(moved, before: section)
+                    }
+                    return true
+                } isTargeted: { isTargeted in
+                    if isTargeted {
+                        dropTarget = section
+                    } else if dropTarget == section {
+                        dropTarget = nil
+                    }
+                }
             }
 
             Spacer(minLength: 4)

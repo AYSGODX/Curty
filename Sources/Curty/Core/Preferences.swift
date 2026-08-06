@@ -56,6 +56,7 @@ final class Preferences: ObservableObject {
         static let clipboardMonitoring = "privacy.clipboardMonitoring"
         static let clipboardImages = "privacy.clipboardImages"
         static let mediaIntegration = "privacy.mediaIntegration"
+        static let toolOrder = "layout.toolOrder"
     }
 
     private let defaults: UserDefaults
@@ -71,6 +72,12 @@ final class Preferences: ObservableObject {
 
     @Published var mediaIntegrationEnabled: Bool {
         didSet { defaults.set(mediaIntegrationEnabled, forKey: Key.mediaIntegration) }
+    }
+
+    /// Raw values of the rail tools in the user's own order. Empty means "never
+    /// rearranged", which resolves to the natural order.
+    @Published var toolOrder: [String] {
+        didSet { defaults.set(toolOrder, forKey: Key.toolOrder) }
     }
 
     @Published private(set) var launchAtLoginState: LaunchAtLoginState = .disabled
@@ -98,6 +105,7 @@ final class Preferences: ObservableObject {
         clipboardMonitoringEnabled = defaults.bool(forKey: Key.clipboardMonitoring)
         clipboardImagesEnabled = defaults.bool(forKey: Key.clipboardImages)
         mediaIntegrationEnabled = defaults.bool(forKey: Key.mediaIntegration)
+        toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }
 

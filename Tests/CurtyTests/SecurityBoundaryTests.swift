@@ -135,6 +135,26 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertFalse(AppModel.Tool.settings.title.isEmpty)
     }
 
+    @MainActor
+    func testToolOrderSurvivesStaleAndBrokenStoredValues() {
+        let available = AppModel.Tool.primary
+
+        XCTAssertEqual(ToolOrderPolicy.resolve(stored: [], available: available), available)
+
+        // Unknown names, duplicates and a tool that is not on the rail are dropped,
+        // and anything the stored order omits still shows up at the end.
+        let messy = ["clipboard", "clipboard", "нет-такого", "settings", "media"]
+        let resolved = ToolOrderPolicy.resolve(stored: messy, available: available)
+        XCTAssertEqual(resolved.prefix(2).map(\.rawValue), ["clipboard", "media"])
+        XCTAssertEqual(Set(resolved), Set(available))
+        XCTAssertEqual(resolved.count, available.count)
+
+        let moved = ToolOrderPolicy.move(.notes, before: .media, in: available)
+        XCTAssertEqual(moved.first, .notes)
+        XCTAssertEqual(Set(moved), Set(available))
+        XCTAssertEqual(ToolOrderPolicy.move(.media, before: .media, in: available), available)
+    }
+
     func testCalendarHorizonSpansDayAndWeek() {
         XCTAssertEqual(CalendarStore.Horizon.day.duration, 24 * 60 * 60)
         XCTAssertEqual(CalendarStore.Horizon.week.duration, 7 * 24 * 60 * 60)

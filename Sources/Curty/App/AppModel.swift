@@ -1,6 +1,36 @@
 import AppKit
 import Combine
 
+/// The stored order is user data, so it can be stale, truncated, or name a tool
+/// that no longer exists. Keep whatever is still valid in the stored order and
+/// append the rest, so a tool added in a later version can never go missing.
+enum ToolOrderPolicy {
+    static func resolve(stored: [String], available: [AppModel.Tool]) -> [AppModel.Tool] {
+        var placed: Set<AppModel.Tool> = []
+        var ordered: [AppModel.Tool] = []
+
+        for raw in stored {
+            guard let tool = AppModel.Tool(rawValue: raw),
+                  available.contains(tool),
+                  !placed.contains(tool) else { continue }
+            placed.insert(tool)
+            ordered.append(tool)
+        }
+
+        ordered.append(contentsOf: available.filter { !placed.contains($0) })
+        return ordered
+    }
+
+    static func move(_ tool: AppModel.Tool, before target: AppModel.Tool, in order: [AppModel.Tool]) -> [AppModel.Tool] {
+        guard tool != target, let from = order.firstIndex(of: tool) else { return order }
+        var result = order
+        result.remove(at: from)
+        guard let to = result.firstIndex(of: target) else { return order }
+        result.insert(tool, at: to)
+        return result
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     enum Tool: String, CaseIterable, Identifiable {
@@ -42,6 +72,7 @@ final class AppModel: ObservableObject {
     @Published var selectedTool: Tool = .media
     @Published var isPanelOpen = false
     @Published var isPinned = false
+    @Published private(set) var orderedTools: [Tool] = Tool.primary
 
     let preferences: Preferences
     let clipboard: ClipboardStore
@@ -82,6 +113,13 @@ final class AppModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        preferences.$toolOrder
+            .removeDuplicates()
+            .sink { [weak self] stored in
+                self?.orderedTools = ToolOrderPolicy.resolve(stored: stored, available: Tool.primary)
+            }
+            .store(in: &cancellables)
+
         $isPanelOpen
             .removeDuplicates()
             .sink { [weak media] visible in media?.setPanelVisible(visible) }
@@ -107,6 +145,16 @@ final class AppModel: ObservableObject {
     func select(_ tool: Tool) {
         selectedTool = tool
         if tool == .calendar { calendar.refreshAuthorization() }
+    }
+
+    func moveTool(_ tool: Tool, before target: Tool) {
+        let moved = ToolOrderPolicy.move(tool, before: target, in: orderedTools)
+        guard moved != orderedTools else { return }
+        preferences.toolOrder = moved.map(\.rawValue)
+    }
+
+    func resetToolOrder() {
+        preferences.toolOrder = []
     }
 
     func deleteAllLocalData() {

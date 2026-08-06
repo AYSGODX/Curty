@@ -69,6 +69,17 @@ struct SettingsPane: View {
                     }
                 }
 
+                section("Панель") {
+                    Text("Иконки в левом столбце можно перетаскивать, чтобы поставить нужный инструмент первым.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Вернуть исходный порядок") { model.resetToolOrder() }
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 section("Локальные данные") {
                     Text("Удаляет историю буфера, ссылки с полки, сниппеты и заметки с этого Mac.")
                         .font(.caption2)

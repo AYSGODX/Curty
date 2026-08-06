@@ -6,26 +6,38 @@ struct ClipboardView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                Label(
-                    store.isMonitoring ? "Наблюдение включено" : "Наблюдение приостановлено",
-                    systemImage: store.isMonitoring ? "record.circle" : "pause.circle"
-                )
-                .font(.caption.weight(.medium))
-                .foregroundStyle(store.isMonitoring ? CurtyTheme.success : .secondary)
-                Spacer()
-                if !store.entries.isEmpty {
-                    Button("Очистить") { store.clear() }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            HStack(spacing: 8) {
+                // The switch belongs next to the state it controls: sitting by
+                // "Очистить" it read as that button's switch.
                 Toggle("", isOn: $preferences.clipboardMonitoringEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(CurtyTheme.accent)
                     .accessibilityLabel("Наблюдение за буфером обмена")
+
+                Label(
+                    store.isMonitoring ? "Наблюдение включено" : "Наблюдение приостановлено",
+                    systemImage: store.isMonitoring ? "record.circle" : "pause.circle"
+                )
+                .font(.caption.weight(.medium))
+                .foregroundStyle(store.isMonitoring ? CurtyTheme.success : .secondary)
+                .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if !store.entries.isEmpty {
+                    Button {
+                        store.clear()
+                    } label: {
+                        Label("Очистить", systemImage: "trash")
+                            .font(.caption)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Очистить историю буфера")
+                }
             }
 
             if store.entries.isEmpty {
