@@ -108,10 +108,17 @@ struct ShelfView: View {
                             // Double click opens, single click only selects — the
                             // selection is what the space bar previews.
                             .onTapGesture(count: 2) { requestOpen(item) }
-                            .onTapGesture {
-                                selectedID = item.id
-                                isListFocused = true
-                            }
+                            // Selection runs as a simultaneous gesture: as a
+                            // plain single tap it would have to wait out the
+                            // double-click interval before it could know it was
+                            // not the first half of one, and the row lit up only
+                            // after that pause.
+                            .simultaneousGesture(
+                                TapGesture().onEnded {
+                                    selectedID = item.id
+                                    isListFocused = true
+                                }
+                            )
                             // Drag the row straight into Finder or another app.
                             // The receiver reads the file with its own access,
                             // so the bookmark scope does not have to stay open.
@@ -154,6 +161,9 @@ struct ShelfView: View {
         }
         .focusable()
         .focused($isListFocused)
+        // Focus is only here so the space bar arrives; the system focus ring
+        // around the whole list is just in the way.
+        .focusEffectDisabled()
         // Space previews the selected file and closes the preview again, the
         // way it behaves in Finder.
         .onKeyPress(.space) {
