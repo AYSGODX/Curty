@@ -77,7 +77,8 @@ struct ShelfView: View {
                                         systemName: "doc.on.doc",
                                         title: "Копировать файл",
                                         size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13
+                                        glyphSize: 13,
+                                        confirmsWith: "checkmark"
                                     ) { store.copy(item) }
                                     CurtyRowButton(
                                         systemName: "magnifyingglass",

@@ -78,12 +78,14 @@ struct ClipboardView: View {
                                 HStack(spacing: 0) {
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
-                                        title: "Вернуть в буфер обмена"
+                                        title: "Вернуть в буфер обмена",
+                                        confirmsWith: "checkmark"
                                     ) { store.copy(entry) }
                                     if case .image = entry.payload {
                                         CurtyRowButton(
                                             systemName: "tray.and.arrow.down",
-                                            title: "Сохранить изображение на полку"
+                                            title: "Сохранить изображение на полку",
+                                            confirmsWith: "checkmark"
                                         ) { store.saveImage(entry) }
                                     }
                                     CurtyRowButton(

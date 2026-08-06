@@ -42,13 +42,30 @@ struct SnippetsView: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
-                                Spacer()
-                                Button { store.copy(snippet) } label: { Image(systemName: "doc.on.doc") }
-                                    .buttonStyle(.plain).help("Копировать")
-                                Button { draft = SnippetDraft(source: snippet) } label: { Image(systemName: "pencil") }
-                                    .buttonStyle(.plain).help("Изменить")
-                                Button { store.remove(snippet) } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Удалить")
+                                Spacer(minLength: 8)
+                                HStack(spacing: 3) {
+                                    CurtyRowButton(
+                                        systemName: "doc.on.doc",
+                                        title: "Копировать текст",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13,
+                                        confirmsWith: "checkmark"
+                                    ) { store.copy(snippet) }
+                                    CurtyRowButton(
+                                        systemName: "pencil",
+                                        title: "Изменить сниппет",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
+                                    ) { draft = SnippetDraft(source: snippet) }
+                                    CurtyRowButton(
+                                        systemName: "trash",
+                                        title: "Удалить сниппет",
+                                        isDestructive: true,
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
+                                    ) { store.remove(snippet) }
+                                }
+                                .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             .padding(10)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))

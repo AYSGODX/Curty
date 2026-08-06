@@ -38,21 +38,30 @@ struct CurtyRowButton: View {
     var size: CGFloat = 24
     var glyphSize: CGFloat = 12
     var isEnabled = true
+    /// Set for actions whose result is invisible — copying above all — so the
+    /// button briefly turns into a tick and says the deed is done.
+    var confirmsWith: String?
     let action: () -> Void
 
     @State private var isHovering = false
+    @State private var isConfirming = false
+    @State private var confirmation: Task<Void, Never>?
 
     private var isLit: Bool { isHovering && isEnabled }
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
+        Button {
+            action()
+            confirmIfNeeded()
+        } label: {
+            Image(systemName: isConfirming ? (confirmsWith ?? systemName) : systemName)
                 .font(.system(size: glyphSize, weight: .medium))
                 .foregroundStyle(tint)
+                .contentTransition(.symbolEffect(.replace))
                 .frame(width: size, height: size)
                 .background(
                     RoundedRectangle(cornerRadius: size / 4, style: .continuous)
-                        .fill(isLit ? tint.opacity(0.16) : .clear)
+                        .fill(isConfirming ? CurtyTheme.success.opacity(0.18) : (isLit ? tint.opacity(0.16) : .clear))
                 )
                 .contentShape(Rectangle())
         }
@@ -65,7 +74,19 @@ struct CurtyRowButton: View {
         .accessibilityLabel(title)
     }
 
+    private func confirmIfNeeded() {
+        guard confirmsWith != nil else { return }
+        confirmation?.cancel()
+        withAnimation(.easeOut(duration: 0.12)) { isConfirming = true }
+        confirmation = Task {
+            try? await Task.sleep(for: .milliseconds(1_100))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) { isConfirming = false }
+        }
+    }
+
     private var tint: Color {
+        if isConfirming { return CurtyTheme.success }
         guard isEnabled else { return .secondary }
         if isDestructive { return isHovering ? .red : .secondary }
         return isHovering ? CurtyTheme.accent : .secondary
