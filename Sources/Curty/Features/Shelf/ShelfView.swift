@@ -5,18 +5,37 @@ struct ShelfView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var model: AppModel
     @State private var pendingExecutable: ShelfItem?
+    @State private var isConfirmingClear = false
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                Text("Элементов: \(store.items.count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            // "Добавить" sits on the left because the right-hand slot is where
+            // Буфер keeps its "Очистить"; a button that changes meaning when you
+            // switch tabs is a button you eventually misclick.
+            HStack(spacing: 8) {
                 Button("Добавить", systemImage: "plus") { chooseFiles() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(CurtyTheme.accent)
+
+                Text("Элементов: \(store.items.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 8)
+
+                if !store.items.isEmpty {
+                    Button {
+                        isConfirmingClear = true
+                    } label: {
+                        Label("Очистить", systemImage: "trash")
+                            .font(.caption)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Убрать все файлы с полки")
+                }
             }
 
             if store.items.isEmpty {
@@ -44,15 +63,24 @@ struct ShelfView: View {
                                 Text(item.name)
                                     .font(.system(size: 12, weight: .medium))
                                     .lineLimit(1)
-                                Spacer()
-                                Button { requestOpen(item) } label: { Image(systemName: "arrow.up.forward.app") }
-                                    .buttonStyle(.plain).help("Открыть")
-                                Button { store.copyPath(item) } label: { Image(systemName: "doc.on.doc") }
-                                    .buttonStyle(.plain).help("Копировать путь")
-                                Button { store.reveal(item) } label: { Image(systemName: "magnifyingglass") }
-                                    .buttonStyle(.plain).help("Показать в Finder")
-                                Button { store.remove(item) } label: { Image(systemName: "xmark") }
-                                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Удалить")
+                                Spacer(minLength: 6)
+                                CurtyRowButton(
+                                    systemName: "arrow.up.forward.app",
+                                    title: "Открыть файл"
+                                ) { requestOpen(item) }
+                                CurtyRowButton(
+                                    systemName: "doc.on.doc",
+                                    title: "Копировать файл"
+                                ) { store.copy(item) }
+                                CurtyRowButton(
+                                    systemName: "magnifyingglass",
+                                    title: "Показать в Finder"
+                                ) { revealInFinder(item) }
+                                CurtyRowButton(
+                                    systemName: "xmark",
+                                    title: "Убрать с полки",
+                                    isDestructive: true
+                                ) { store.remove(item) }
                             }
                             .padding(10)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
@@ -91,6 +119,15 @@ struct ShelfView: View {
         } message: { item in
             Text("«\(item.name)» может запустить код на этом Mac.")
         }
+        .confirmationDialog(
+            "Убрать все файлы с полки?",
+            isPresented: $isConfirmingClear
+        ) {
+            Button("Убрать", role: .destructive) { store.clearReferences() }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Полка забудет ссылки на файлы. Сами файлы останутся на своих местах.")
+        }
     }
 
     /// SwiftUI's fileImporter opens the dialog without bringing the app forward.
@@ -114,6 +151,13 @@ struct ShelfView: View {
                 store.addUserSelectedFiles(dialog.urls)
             }
         }
+    }
+
+    /// Finder comes forward as a result of this, so the panel gets out of the
+    /// way instead of hovering over what the user was sent to look at.
+    private func revealInFinder(_ item: ShelfItem) {
+        store.reveal(item)
+        model.requestPanelClose()
     }
 
     private func requestOpen(_ item: ShelfItem) {

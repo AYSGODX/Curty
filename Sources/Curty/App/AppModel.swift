@@ -71,9 +71,22 @@ final class AppModel: ObservableObject {
     @Published var selectedTool: Tool = .media
     @Published var isPanelOpen = false
     @Published var isPinned = false
-    /// Set while a system dialog is up, so the panel does not slide away the
-    /// moment the pointer leaves it for that dialog.
-    @Published var isPresentingDialog = false
+    /// Set while a system dialog is up, so the panel neither slides away the
+    /// moment the pointer leaves it nor covers the dialog it opened.
+    @Published var isPresentingDialog = false {
+        didSet {
+            guard isPresentingDialog != oldValue else { return }
+            onDialogPresentationChange?(isPresentingDialog)
+        }
+    }
+
+    /// Wired by the panel controller, which owns the window itself.
+    var onDialogPresentationChange: ((Bool) -> Void)?
+    var onCloseRequest: (() -> Void)?
+
+    /// Used by actions that hand the user over to another app, where leaving
+    /// the panel hanging over the result would only be in the way.
+    func requestPanelClose() { onCloseRequest?() }
     @Published private(set) var orderedTools: [Tool] = Tool.primary
 
     let preferences: Preferences

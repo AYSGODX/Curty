@@ -136,6 +136,13 @@ final class PanelController {
         panel.orderFrontRegardless()
         startCursorMonitoring()
 
+        // The panel floats at status-bar level, which is above the open dialog
+        // it just asked for. Step down for as long as that dialog is up.
+        model.onDialogPresentationChange = { [weak self] isPresenting in
+            self?.panel.level = isPresenting ? .normal : .statusBar
+        }
+        model.onCloseRequest = { [weak self] in self?.dismiss() }
+
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -180,6 +187,17 @@ final class PanelController {
     func close() {
         closeWorkItem = nil
         guard !model.isPinned else { return }
+        hide()
+    }
+
+    /// Asked for explicitly, so it ignores the pin: the user is being handed
+    /// over to another app and the panel would only sit on top of the result.
+    func dismiss() {
+        closeWorkItem = nil
+        hide()
+    }
+
+    private func hide() {
         awaitsCursorArrival = false
         model.isPanelOpen = false
         panel.ignoresMouseEvents = true

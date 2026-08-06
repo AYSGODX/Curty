@@ -87,10 +87,14 @@ final class ShelfStore: ObservableObject {
         return withAccess(to: item) { NSWorkspace.shared.open($0) }
     }
 
-    func copyPath(_ item: ShelfItem) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(item.url.path, forType: .string)
+    /// Puts the file itself on the pasteboard, so pasting in Finder produces a
+    /// copy of it rather than a line of text with its path.
+    func copy(_ item: ShelfItem) {
+        withAccess(to: item) { url in
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.writeObjects([url as NSURL])
+        }
     }
 
     private func resolve(_ stored: StoredShelfItem) -> ShelfItem? {

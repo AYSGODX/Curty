@@ -24,6 +24,42 @@ enum CurtyTheme {
     static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
 }
 
+/// Icon-only action in a list row. Bare glyphs give no sign they are clickable,
+/// so this lights up under the pointer and carries a tooltip explaining itself.
+struct CurtyRowButton: View {
+    let systemName: String
+    let title: String
+    var isDestructive = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isHovering ? tint.opacity(0.16) : .clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+        }
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    private var tint: Color {
+        if isDestructive { return isHovering ? .red : .secondary }
+        return isHovering ? CurtyTheme.accent : .secondary
+    }
+}
+
 struct CurtyCard<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     private let content: Content
