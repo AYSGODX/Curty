@@ -43,6 +43,29 @@ struct ClipboardView: View {
                 }
             }
 
+            // Images are opt-in, and with them off nothing about the clipboard
+            // screen says so — it just never shows a picture, which reads as
+            // broken rather than switched off.
+            if store.isMonitoring, !preferences.clipboardImagesEnabled {
+                HStack(spacing: 8) {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .foregroundStyle(CurtyTheme.accent)
+                    Text("Изображения не попадают в историю")
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Button("Включить") { preferences.clipboardImagesEnabled = true }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .curtyHoverLift()
+                        .help("Превью будут храниться в памяти; на полку они попадают только по отдельному нажатию")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            }
+
             if store.entries.isEmpty {
                 CurtyCard {
                     VStack(spacing: 9) {
