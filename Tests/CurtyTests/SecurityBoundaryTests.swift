@@ -149,10 +149,18 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(Set(resolved), Set(available))
         XCTAssertEqual(resolved.count, available.count)
 
-        let moved = ToolOrderPolicy.move(.notes, before: .media, in: available)
-        XCTAssertEqual(moved.first, .notes)
-        XCTAssertEqual(Set(moved), Set(available))
-        XCTAssertEqual(ToolOrderPolicy.move(.media, before: .media, in: available), available)
+        let toFront = ToolOrderPolicy.move(.notes, toIndex: 0, in: available)
+        XCTAssertEqual(toFront.first, .notes)
+        XCTAssertEqual(Set(toFront), Set(available))
+        XCTAssertEqual(toFront.count, available.count)
+
+        // Dragging past either end parks the icon at the end, never drops it.
+        let toBack = ToolOrderPolicy.move(.media, toIndex: 99, in: available)
+        XCTAssertEqual(toBack.last, .media)
+        XCTAssertEqual(toBack.count, available.count)
+        let clampedLow = ToolOrderPolicy.move(.notes, toIndex: -5, in: available)
+        XCTAssertEqual(clampedLow.first, .notes)
+        XCTAssertEqual(ToolOrderPolicy.move(.media, toIndex: 0, in: available), available)
     }
 
     func testCalendarHorizonSpansDayAndWeek() {

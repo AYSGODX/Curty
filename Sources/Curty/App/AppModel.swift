@@ -21,12 +21,11 @@ enum ToolOrderPolicy {
         return ordered
     }
 
-    static func move(_ tool: AppModel.Tool, before target: AppModel.Tool, in order: [AppModel.Tool]) -> [AppModel.Tool] {
-        guard tool != target, let from = order.firstIndex(of: tool) else { return order }
+    static func move(_ tool: AppModel.Tool, toIndex index: Int, in order: [AppModel.Tool]) -> [AppModel.Tool] {
+        guard let from = order.firstIndex(of: tool) else { return order }
         var result = order
         result.remove(at: from)
-        guard let to = result.firstIndex(of: target) else { return order }
-        result.insert(tool, at: to)
+        result.insert(tool, at: min(max(0, index), result.count))
         return result
     }
 }
@@ -147,8 +146,8 @@ final class AppModel: ObservableObject {
         if tool == .calendar { calendar.refreshAuthorization() }
     }
 
-    func moveTool(_ tool: Tool, before target: Tool) {
-        let moved = ToolOrderPolicy.move(tool, before: target, in: orderedTools)
+    func moveTool(_ tool: Tool, toIndex index: Int) {
+        let moved = ToolOrderPolicy.move(tool, toIndex: index, in: orderedTools)
         guard moved != orderedTools else { return }
         preferences.toolOrder = moved.map(\.rawValue)
     }
