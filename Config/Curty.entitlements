@@ -7,7 +7,8 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
     <!-- Outbound only, used for exactly one thing: fetching the album cover
-         from the link Spotify itself reports. See docs/PRIVACY.md. -->
+         from the link Spotify itself reports. Confined to ArtworkLoader.swift
+         by Scripts/security-check.sh. -->
     <key>com.apple.security.network.client</key>
     <true/>
     <key>com.apple.security.files.bookmarks.app-scope</key>
