@@ -18,6 +18,20 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(MeetingURLPolicy.firstApprovedURL(in: text)?.host, "teams.microsoft.com")
     }
 
+    func testCurtysOwnWritesAreMarkedSoHistorySkipsThem() {
+        // Отдельная доска, чтобы не трогать буфер обмена пользователя.
+        let board = NSPasteboard(name: .init("dev.curty.tests.\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+
+        board.clearContents()
+        board.setString("извне", forType: .string)
+        XCTAssertFalse(InternalPasteboard.containsMarker(board))
+
+        InternalPasteboard.write(to: board) { $0.setString("из Curty", forType: .string) }
+        XCTAssertTrue(InternalPasteboard.containsMarker(board))
+        XCTAssertEqual(board.string(forType: .string), "из Curty")
+    }
+
     func testClipboardSensitiveTypesAreIgnored() {
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["org.nspasteboard.TransientType"]))

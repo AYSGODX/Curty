@@ -123,7 +123,6 @@ final class ClipboardStore: ObservableObject {
     var onImageSaved: ((URL) -> Void)?
 
     private let pasteboard = NSPasteboard.general
-    private let internalType = NSPasteboard.PasteboardType("dev.curty.internal")
     private var lastChangeCount = NSPasteboard.general.changeCount
     private var timer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -161,12 +160,12 @@ final class ClipboardStore: ObservableObject {
     func remove(_ entry: ClipboardEntry) { entries.removeAll { $0.id == entry.id } }
 
     func copy(_ entry: ClipboardEntry) {
-        pasteboard.clearContents()
-        pasteboard.setData(Data(), forType: internalType)
-        switch entry.payload {
-        case .text(let text): pasteboard.setString(text, forType: .string)
-        case .file(let url): pasteboard.writeObjects([url as NSURL])
-        case .image(let data): pasteboard.setData(data, forType: .png)
+        InternalPasteboard.write(to: pasteboard) { board in
+            switch entry.payload {
+            case .text(let text): board.setString(text, forType: .string)
+            case .file(let url): board.writeObjects([url as NSURL])
+            case .image(let data): board.setData(data, forType: .png)
+            }
         }
         lastChangeCount = pasteboard.changeCount
     }
@@ -187,7 +186,7 @@ final class ClipboardStore: ObservableObject {
 
         let typeNames = (pasteboard.types ?? []).map(\.rawValue)
         guard !ClipboardPolicy.shouldIgnore(typeNames: typeNames),
-              pasteboard.data(forType: internalType) == nil else { return }
+              !InternalPasteboard.containsMarker(pasteboard) else { return }
 
         let fileOptions: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
         if let url = (pasteboard.readObjects(forClasses: [NSURL.self], options: fileOptions) as? [URL])?.first {

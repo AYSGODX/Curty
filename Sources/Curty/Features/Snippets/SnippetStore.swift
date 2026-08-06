@@ -61,9 +61,9 @@ final class SnippetStore: ObservableObject {
     }
 
     func copy(_ snippet: Snippet) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(snippet.body, forType: .string)
+        // Сниппет уже хранится в Curty, поэтому его копия в истории буфера была
+        // бы дубликатом — как и файл с полки.
+        InternalPasteboard.write { $0.setString(snippet.body, forType: .string) }
     }
 
     func clear() {

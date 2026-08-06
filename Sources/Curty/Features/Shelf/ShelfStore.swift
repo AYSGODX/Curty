@@ -96,9 +96,7 @@ final class ShelfStore: ObservableObject {
     /// copy of it rather than a line of text with its path.
     func copy(_ item: ShelfItem) {
         withAccess(to: item) { url in
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.writeObjects([url as NSURL])
+            InternalPasteboard.write { $0.writeObjects([url as NSURL]) }
         }
     }
 
