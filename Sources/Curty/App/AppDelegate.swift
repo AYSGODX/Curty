@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pinMenuItem?.state = model.isPinned ? .on : .off
     }
 
-    @objc private func togglePanel() { panelController?.toggle() }
+    @objc private func togglePanel() { panelController?.toggle(holdingUntilCursorArrives: true) }
 
     @objc private func togglePin() {
         model.isPinned.toggle()
@@ -62,8 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
+        model.select(.settings)
+        panelController?.open(holdingUntilCursorArrives: true)
     }
 
     @objc private func quit() { NSApp.terminate(nil) }

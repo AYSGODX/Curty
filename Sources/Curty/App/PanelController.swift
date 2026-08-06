@@ -87,6 +87,7 @@ final class PanelController {
     private var screenObserver: NSObjectProtocol?
     private var overlayCheckedAt: TimeInterval = 0
     private var overlayWasVisible = false
+    private var awaitsCursorArrival = false
 
     private let panelSize = NSSize(width: 488, height: 420)
 
@@ -137,11 +138,17 @@ final class PanelController {
         panel.orderOut(nil)
     }
 
-    func toggle() { model.isPanelOpen ? close() : open() }
+    func toggle(holdingUntilCursorArrives: Bool = false) {
+        model.isPanelOpen ? close() : open(holdingUntilCursorArrives: holdingUntilCursorArrives)
+    }
 
-    func open() {
+    /// Opened from the menu bar the cursor is nowhere near the panel, so the
+    /// ordinary "cursor left" rule would close it again within a frame. In that
+    /// case hold it open until the cursor has actually visited it once.
+    func open(holdingUntilCursorArrives: Bool = false) {
         cancelClose()
         guard !model.isPanelOpen else { return }
+        awaitsCursorArrival = holdingUntilCursorArrives
         position(on: screenUnderMouse() ?? NSScreen.main)
         model.isPanelOpen = true
         panel.ignoresMouseEvents = false
@@ -153,6 +160,7 @@ final class PanelController {
     func close() {
         closeWorkItem = nil
         guard !model.isPinned else { return }
+        awaitsCursorArrival = false
         model.isPanelOpen = false
         panel.ignoresMouseEvents = true
         scheduleCursorTimer(interval: PanelInteractionPolicy.idleSampleInterval)
@@ -209,6 +217,9 @@ final class PanelController {
 
         guard model.isPanelOpen, !model.isPinned else { return }
         if panel.attachedSheet != nil || panel.frame.insetBy(dx: -8, dy: -8).contains(point) {
+            awaitsCursorArrival = false
+            cancelClose()
+        } else if awaitsCursorArrival {
             cancelClose()
         } else {
             scheduleClose()

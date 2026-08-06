@@ -125,6 +125,16 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(MediaSeekPolicy.format(-1), "0.000")
     }
 
+    @MainActor
+    func testSettingsIsATabRatherThanASeparateWindow() {
+        // Settings must stay reachable as a panel tab, but out of the tool list.
+        XCTAssertTrue(AppModel.Tool.allCases.contains(.settings))
+        XCTAssertFalse(AppModel.Tool.primary.contains(.settings))
+        XCTAssertEqual(AppModel.Tool.primary.count, AppModel.Tool.allCases.count - 1)
+        XCTAssertFalse(AppModel.Tool.settings.symbol.isEmpty)
+        XCTAssertFalse(AppModel.Tool.settings.title.isEmpty)
+    }
+
     func testCalendarHorizonSpansDayAndWeek() {
         XCTAssertEqual(CalendarStore.Horizon.day.duration, 24 * 60 * 60)
         XCTAssertEqual(CalendarStore.Horizon.week.duration, 7 * 24 * 60 * 60)

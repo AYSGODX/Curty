@@ -1,9 +1,7 @@
-import AppKit
 import SwiftUI
 
 struct PanelRootView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.openSettings) private var openSettings
     @ObservedObject var model: AppModel
 
     var body: some View {
@@ -39,7 +37,7 @@ struct PanelRootView: View {
 
             Spacer().frame(height: 3)
 
-            ForEach(AppModel.Tool.allCases) { section in
+            ForEach(AppModel.Tool.primary) { section in
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) {
                         model.select(section)
@@ -64,17 +62,21 @@ struct PanelRootView: View {
 
             Spacer(minLength: 4)
 
+            // Settings live inside the panel: a separate window would drag the
+            // user to whichever Space it happens to sit on.
             Button {
-                openSettings()
-                // The panel is non-activating, so without this the settings
-                // window opens behind the frontmost app and the click reads
-                // as doing nothing. Matches what the menu bar item does.
-                NSApp.activate(ignoringOtherApps: true)
+                withAnimation(.easeOut(duration: 0.16)) {
+                    model.select(.settings)
+                }
             } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: AppModel.Tool.settings.symbol)
                     .font(.system(size: 15, weight: .medium))
                     .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(model.selectedTool == .settings ? .white : .secondary)
+                    .background(
+                        RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
+                            .fill(model.selectedTool == .settings ? CurtyTheme.accent : .clear)
+                    )
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -116,6 +118,7 @@ struct PanelRootView: View {
             case .calendar: CalendarView(store: model.calendar)
             case .translate: TranslateView()
             case .notes: NotesView(store: model.notes)
+            case .settings: SettingsPane(model: model)
             }
         }
         .padding(.horizontal, 18)

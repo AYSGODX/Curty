@@ -4,9 +4,13 @@ import Combine
 @MainActor
 final class AppModel: ObservableObject {
     enum Tool: String, CaseIterable, Identifiable {
-        case media, shelf, clipboard, snippets, calendar, translate, notes
+        case media, shelf, clipboard, snippets, calendar, translate, notes, settings
 
         var id: String { rawValue }
+
+        /// Settings sit apart at the foot of the rail, so they are not part of
+        /// the tool list itself.
+        static var primary: [Tool] { allCases.filter { $0 != .settings } }
 
         var title: String {
             switch self {
@@ -17,6 +21,7 @@ final class AppModel: ObservableObject {
             case .calendar: return "Календарь"
             case .translate: return "Перевод"
             case .notes: return "Заметки"
+            case .settings: return "Настройки"
             }
         }
 
@@ -29,6 +34,7 @@ final class AppModel: ObservableObject {
             case .calendar: return "calendar"
             case .translate: return "character.bubble"
             case .notes: return "square.and.pencil"
+            case .settings: return "gearshape"
             }
         }
     }
