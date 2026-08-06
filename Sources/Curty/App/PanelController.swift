@@ -235,7 +235,7 @@ final class PanelController {
             return
         }
 
-        guard model.isPanelOpen, !model.isPinned else { return }
+        guard model.isPanelOpen, !model.isPinned, !model.isPresentingDialog else { return }
         if panel.attachedSheet != nil || panel.frame.insetBy(dx: -8, dy: -8).contains(point) {
             awaitsCursorArrival = false
             cancelClose()

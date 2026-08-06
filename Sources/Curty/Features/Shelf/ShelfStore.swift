@@ -106,7 +106,14 @@ final class ShelfStore: ObservableObject {
                 options: [.withSecurityScope, .withoutUI],
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
-            ), !isStale, FileManager.default.fileExists(atPath: url.path) else { return nil }
+            ), !isStale else { return nil }
+
+            // Whether a file outside the container exists can only be answered
+            // with the scope open. Asking without it always says "no", which
+            // quietly emptied the shelf on every launch.
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
             return ShelfItem(id: stored.id, location: stored.location, url: url, addedAt: stored.addedAt)
         }
     }

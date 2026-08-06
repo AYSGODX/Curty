@@ -16,6 +16,7 @@ struct PanelRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: AppModel
     @State private var drag: RailDrag?
+    @State private var isDropTarget = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -34,6 +35,27 @@ struct PanelRootView: View {
                 .strokeBorder(.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.18), radius: 28, y: 14)
+        // Files land anywhere on the panel, not only on the Shelf screen: the
+        // panel unfolds on whichever tool was last used, and hunting for the
+        // right tab mid-drag is not something a shelf should ask for.
+        .dropDestination(for: URL.self) { urls, _ in
+            let files = urls.filter(\.isFileURL)
+            guard !files.isEmpty else { return false }
+            model.shelf.addUserSelectedFiles(files)
+            withAnimation(.easeOut(duration: 0.16)) { model.select(.shelf) }
+            return true
+        } isTargeted: { isDropTarget = $0 }
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
+                    .strokeBorder(CurtyTheme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+                    .background(
+                        CurtyTheme.accent.opacity(0.07),
+                        in: RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
+                    )
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     /// The dragged icon follows the pointer exactly; the others step aside by a
@@ -184,7 +206,7 @@ struct PanelRootView: View {
         Group {
             switch model.selectedTool {
             case .media: MediaView(store: model.media, preferences: model.preferences)
-            case .shelf: ShelfView(store: model.shelf)
+            case .shelf: ShelfView(store: model.shelf, model: model)
             case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences)
             case .snippets: SnippetsView(store: model.snippets)
             case .calendar: CalendarView(store: model.calendar)

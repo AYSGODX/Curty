@@ -71,6 +71,9 @@ final class AppModel: ObservableObject {
     @Published var selectedTool: Tool = .media
     @Published var isPanelOpen = false
     @Published var isPinned = false
+    /// Set while a system dialog is up, so the panel does not slide away the
+    /// moment the pointer leaves it for that dialog.
+    @Published var isPresentingDialog = false
     @Published private(set) var orderedTools: [Tool] = Tool.primary
 
     let preferences: Preferences

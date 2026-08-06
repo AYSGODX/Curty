@@ -1,9 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct ShelfView: View {
     @ObservedObject var store: ShelfStore
-    @State private var isImporterPresented = false
-    @State private var isDropTarget = false
+    @ObservedObject var model: AppModel
     @State private var pendingExecutable: ShelfItem?
 
     var body: some View {
@@ -13,7 +13,7 @@ struct ShelfView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Добавить", systemImage: "plus") { isImporterPresented = true }
+                Button("Добавить", systemImage: "plus") { chooseFiles() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(CurtyTheme.accent)
@@ -75,27 +75,6 @@ struct ShelfView: View {
                 .foregroundStyle(.red)
             }
         }
-        .fileImporter(
-            isPresented: $isImporterPresented,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result { store.addUserSelectedFiles(urls) }
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-            let files = urls.filter(\.isFileURL)
-            guard !files.isEmpty else { return false }
-            store.addUserSelectedFiles(files)
-            return true
-        } isTargeted: { isDropTarget = $0 }
-        .overlay {
-            if isDropTarget {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(CurtyTheme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
-                    .background(CurtyTheme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
-                    .allowsHitTesting(false)
-            }
-        }
         .confirmationDialog(
             "Открыть исполняемый файл?",
             isPresented: Binding(
@@ -111,6 +90,29 @@ struct ShelfView: View {
             Button("Отмена", role: .cancel) { pendingExecutable = nil }
         } message: { item in
             Text("«\(item.name)» может запустить код на этом Mac.")
+        }
+    }
+
+    /// SwiftUI's fileImporter opens the dialog without bringing the app forward.
+    /// Curty runs in the background, so the dialog appeared behind the frontmost
+    /// window and the button looked dead. Driving NSOpenPanel directly lets it
+    /// be raised and focused.
+    private func chooseFiles() {
+        let dialog = NSOpenPanel()
+        dialog.allowsMultipleSelection = true
+        dialog.canChooseFiles = true
+        dialog.canChooseDirectories = true
+        dialog.prompt = "Добавить"
+        dialog.message = "Выберите файлы для полки Curty"
+
+        model.isPresentingDialog = true
+        NSApp.activate(ignoringOtherApps: true)
+        dialog.begin { response in
+            MainActor.assumeIsolated {
+                model.isPresentingDialog = false
+                guard response == .OK else { return }
+                store.addUserSelectedFiles(dialog.urls)
+            }
         }
     }
 
