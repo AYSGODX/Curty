@@ -43,7 +43,13 @@ struct SnippetsView: View {
                                         .lineLimit(2)
                                 }
                                 Spacer(minLength: 8)
-                                HStack(spacing: 3) {
+                                HStack(spacing: CurtyTheme.rowActionSpacing) {
+                                    CurtyRowButton(
+                                        systemName: "pencil",
+                                        title: "Изменить сниппет",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
+                                    ) { draft = SnippetDraft(source: snippet) }
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
                                         title: "Копировать текст",
@@ -51,12 +57,9 @@ struct SnippetsView: View {
                                         glyphSize: 13,
                                         confirmsWith: "checkmark"
                                     ) { store.copy(snippet) }
-                                    CurtyRowButton(
-                                        systemName: "pencil",
-                                        title: "Изменить сниппет",
-                                        size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13
-                                    ) { draft = SnippetDraft(source: snippet) }
+
+                                    Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
+
                                     CurtyRowButton(
                                         systemName: "trash",
                                         title: "Удалить сниппет",

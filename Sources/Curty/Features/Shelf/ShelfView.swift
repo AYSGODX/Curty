@@ -72,7 +72,16 @@ struct ShelfView: View {
                                 // the same place. Opening moved to a double click
                                 // on the row, which left room to make the rest
                                 // big enough not to misclick.
-                                HStack(spacing: 3) {
+                                // Copy sits next to last so it and the cross land
+                                // on the same spots as in Буфер, where those are
+                                // the only two actions.
+                                HStack(spacing: CurtyTheme.rowActionSpacing) {
+                                    CurtyRowButton(
+                                        systemName: "magnifyingglass",
+                                        title: "Показать в Finder",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
+                                    ) { revealInFinder(item) }
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
                                         title: "Копировать файл",
@@ -80,12 +89,9 @@ struct ShelfView: View {
                                         glyphSize: 13,
                                         confirmsWith: "checkmark"
                                     ) { store.copy(item) }
-                                    CurtyRowButton(
-                                        systemName: "magnifyingglass",
-                                        title: "Показать в Finder",
-                                        size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13
-                                    ) { revealInFinder(item) }
+
+                                    Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
+
                                     CurtyRowButton(
                                         systemName: "xmark",
                                         title: "Убрать с полки",

@@ -75,25 +75,35 @@ struct ClipboardView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer(minLength: 6)
-                                HStack(spacing: 0) {
-                                    CurtyRowButton(
-                                        systemName: "doc.on.doc",
-                                        title: "Вернуть в буфер обмена",
-                                        confirmsWith: "checkmark"
-                                    ) { store.copy(entry) }
+                                HStack(spacing: CurtyTheme.rowActionSpacing) {
                                     if case .image = entry.payload {
                                         CurtyRowButton(
                                             systemName: "tray.and.arrow.down",
                                             title: "Сохранить изображение на полку",
+                                            size: CurtyTheme.rowActionSize,
+                                            glyphSize: 13,
                                             confirmsWith: "checkmark"
                                         ) { store.saveImage(entry) }
                                     }
                                     CurtyRowButton(
+                                        systemName: "doc.on.doc",
+                                        title: "Вернуть в буфер обмена",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13,
+                                        confirmsWith: "checkmark"
+                                    ) { store.copy(entry) }
+
+                                    Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
+
+                                    CurtyRowButton(
                                         systemName: "xmark",
                                         title: "Убрать из истории",
-                                        isDestructive: true
+                                        isDestructive: true,
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
                                     ) { store.remove(entry) }
                                 }
+                                .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             .padding(10)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))

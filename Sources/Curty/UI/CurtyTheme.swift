@@ -11,7 +11,11 @@ enum CurtyTheme {
     /// Row actions sit in a fixed-width cluster so the file name always ends at
     /// the same place instead of being eaten by however many buttons a row has.
     static let rowActionSize: CGFloat = 28
-    static let rowActionClusterWidth: CGFloat = 92
+    static let rowActionSpacing: CGFloat = 3
+    /// Gap that isolates the destructive action, so a miss aimed at the button
+    /// beside it does not land on "remove".
+    static let rowActionDestructiveGap: CGFloat = 10
+    static let rowActionClusterWidth: CGFloat = 97
 
     /// One slot from the centre of one rail button to the next, used to turn a
     /// drag distance into how many places the icon has travelled.
