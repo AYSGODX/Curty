@@ -88,6 +88,13 @@ final class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// The panel belongs to a background app, so it is not the key window when it
+/// unfolds. By default the first click is spent making it key and never reaches
+/// the control under the pointer, which meant every action needed two clicks.
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 @MainActor
 final class PanelController {
     private let model: AppModel
@@ -119,7 +126,7 @@ final class PanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
-        panel.contentView = NSHostingView(rootView: PanelRootView(model: model))
+        panel.contentView = FirstMouseHostingView(rootView: PanelRootView(model: model))
     }
 
     func install() {
