@@ -11,7 +11,7 @@ Curty is sandboxed. It has no telemetry, private frameworks, injected libraries,
 - Meeting links must use HTTPS and an approved meeting-provider host.
 - Music/Spotify automation starts automatically and uses a fixed command allowlist.
 - Launch at login is never enabled automatically.
-- The panel opens only after the pointer rests in the notch, so passing through it on the way elsewhere does not summon it. Curty does not inspect other applications' windows to decide this.
+- The notch stays inactive while the Dock stacks extra screen-covering windows, which is how Mission Control and App Exposé are recognised without guessing at fixed system internals. This reads on-screen window size and owner only — no titles, no contents, no screen capture, and no Screen Recording permission.
 
 ## File access
 

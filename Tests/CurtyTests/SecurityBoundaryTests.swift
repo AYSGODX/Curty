@@ -170,13 +170,39 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(Set(CalendarStore.Horizon.allCases.map(\.title)), ["Сутки", "Неделя"])
     }
 
-    func testHoverDwellIsShortEnoughToFeelImmediate() {
-        // Long enough that a pointer crossing the notch does not open the panel,
-        // short enough that a deliberate hover still feels instant.
-        XCTAssertGreaterThanOrEqual(PanelInteractionPolicy.hoverDwell, 0.1)
-        XCTAssertLessThanOrEqual(PanelInteractionPolicy.hoverDwell, 0.25)
-        // The idle poll has to be able to observe the dwell elapsing.
-        XCTAssertLessThanOrEqual(PanelInteractionPolicy.idleSampleInterval, PanelInteractionPolicy.hoverDwell)
+    func testOverlayIsARiseAboveTheRestingDockWindowCount() {
+        var watch = DockOverlayWatch()
+
+        // The very first observation only establishes what "resting" means.
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 0))
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 1))
+
+        // Mission Control stacks more windows on top of that.
+        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 3, now: 2))
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 3))
+
+        // A desktop that simply keeps fewer windows lowers the resting count.
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 0, now: 4))
+        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 5))
+    }
+
+    func testPersistentlyHigherCountBecomesTheNewResting() {
+        var watch = DockOverlayWatch()
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 1, now: 0))
+
+        // A count that never comes back down is the system's new normal, not an
+        // overlay: this is what keeps the notch from being blocked forever.
+        XCTAssertTrue(watch.isOverlayPresent(fullScreenDockWindows: 4, now: 1))
+        let settled = 1 + DockOverlayWatch.settleInterval
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 4, now: settled))
+        XCTAssertFalse(watch.isOverlayPresent(fullScreenDockWindows: 4, now: settled + 1))
+    }
+
+    func testOverlayWindowMustCoverMostOfTheDisplay() {
+        let screen = CGSize(width: 1_512, height: 982)
+        XCTAssertTrue(SystemOverlayPolicy.coversDisplay(width: 1_512, height: 982, screenSize: screen))
+        XCTAssertFalse(SystemOverlayPolicy.coversDisplay(width: 1_512, height: 90, screenSize: screen))
+        XCTAssertFalse(SystemOverlayPolicy.coversDisplay(width: 1_512, height: 982, screenSize: .zero))
     }
 
     func testLaunchAtLoginRecognizesSupportedApplicationFolders() {

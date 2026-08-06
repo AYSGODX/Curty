@@ -13,13 +13,6 @@ enum PanelInteractionPolicy {
     /// notch" and closed the panel.
     static let topEdgeSlack: CGFloat = 4
 
-    /// The cursor has to rest in the notch this long before the panel opens.
-    /// Detecting Mission Control turned out to be impossible from public APIs —
-    /// the Dock keeps a full-screen window around whenever the wallpaper is
-    /// visible, which is true both there and on a bare desktop — so instead of
-    /// guessing at the mode, a pointer merely passing through the notch on its
-    /// way somewhere else no longer counts as a hover.
-    static let hoverDwell: TimeInterval = 0.15
 
     static func activationRect(
         screenFrame: NSRect,
@@ -50,6 +43,72 @@ enum PanelInteractionPolicy {
     }
 }
 
+/// Mission Control does not create a window of its own kind — it stacks extra
+/// full-screen windows on top of the ones the Dock already keeps whenever the
+/// wallpaper is visible. Hard-coding how many there should be is what left the
+/// notch dead on a bare desktop, so the resting count is learned instead and
+/// only a rise above it reads as an overlay. Should a system update make the
+/// higher count normal, it settles into the new baseline and suppression stops
+/// by itself; the notch can never stay blocked.
+struct DockOverlayWatch {
+    /// How long an elevated count may persist before it is accepted as normal.
+    /// Only time spent with the cursor in the notch counts towards it.
+    static let settleInterval: TimeInterval = 8
+
+    private var restingCount: Int?
+    private var elevatedSince: TimeInterval?
+
+    mutating func isOverlayPresent(fullScreenDockWindows count: Int, now: TimeInterval) -> Bool {
+        guard let resting = restingCount else {
+            restingCount = count
+            return false
+        }
+
+        if count <= resting {
+            restingCount = count
+            elevatedSince = nil
+            return false
+        }
+
+        let since = elevatedSince ?? now
+        elevatedSince = since
+        guard now - since < Self.settleInterval else {
+            restingCount = count
+            elevatedSince = nil
+            return false
+        }
+        return true
+    }
+}
+
+/// Counts on-screen windows the Dock draws over most of the display. Geometry
+/// and owner only — no titles, no contents, no screen capture.
+enum SystemOverlayPolicy {
+    static let coverageThreshold: CGFloat = 0.5
+
+    static func coversDisplay(width: CGFloat, height: CGFloat, screenSize: CGSize) -> Bool {
+        let screenArea = screenSize.width * screenSize.height
+        guard screenArea > 0 else { return false }
+        return width * height >= screenArea * coverageThreshold
+    }
+
+    static func fullScreenDockWindowCount(screenSize: CGSize) -> Int {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else { return 0 }
+
+        return windows.reduce(into: 0) { total, window in
+            guard window[kCGWindowOwnerName as String] as? String == "Dock",
+                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  let width = bounds["Width"] as? CGFloat,
+                  let height = bounds["Height"] as? CGFloat,
+                  coversDisplay(width: width, height: height, screenSize: screenSize) else { return }
+            total += 1
+        }
+    }
+}
+
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -64,7 +123,9 @@ final class PanelController {
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var screenObserver: NSObjectProtocol?
-    private var zoneEntryAt: TimeInterval?
+    private var overlayWatch = DockOverlayWatch()
+    private var overlayCheckedAt: TimeInterval = 0
+    private var overlayWasVisible = false
     private var awaitsCursorArrival = false
 
     private let panelSize = NSSize(width: 488, height: 420)
@@ -188,16 +249,10 @@ final class PanelController {
         )
 
         if activation.contains(point) {
-            let now = ProcessInfo.processInfo.systemUptime
-            let enteredAt = zoneEntryAt ?? now
-            zoneEntryAt = enteredAt
-            if model.isPanelOpen || now - enteredAt >= PanelInteractionPolicy.hoverDwell {
-                open()
-            }
+            if !model.isPanelOpen, isSystemOverlayVisible(on: screen) { return }
+            open()
             return
         }
-
-        zoneEntryAt = nil
 
         guard model.isPanelOpen, !model.isPinned else { return }
         if panel.attachedSheet != nil || panel.frame.insetBy(dx: -8, dy: -8).contains(point) {
@@ -208,6 +263,20 @@ final class PanelController {
         } else {
             scheduleClose()
         }
+    }
+
+    /// Only consulted while the cursor sits in the activation zone and the panel
+    /// is closed, so the window scan stays rare; the cache bounds it during a
+    /// suppressed hover.
+    private func isSystemOverlayVisible(on screen: NSScreen) -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - overlayCheckedAt < 0.2 { return overlayWasVisible }
+        overlayCheckedAt = now
+        overlayWasVisible = overlayWatch.isOverlayPresent(
+            fullScreenDockWindows: SystemOverlayPolicy.fullScreenDockWindowCount(screenSize: screen.frame.size),
+            now: now
+        )
+        return overlayWasVisible
     }
 
     private func scheduleClose() {

@@ -12,5 +12,6 @@ Curty does not contain analytics, advertising, cloud sync, update tracking, or n
 | Calendar events | Off until permission | Memory only, next 24 hours |
 | Translation text | Explicit input | Not retained by Curty |
 | Music/Spotify state | On; macOS Automation permission may be required | Memory only |
+| Window size and owner, to notice Mission Control | On | Read on demand, never stored |
 
 Language packs for Apple Translation may be downloaded by macOS after a user action in the system-provided flow. Curty itself has no network entitlement.
