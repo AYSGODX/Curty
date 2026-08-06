@@ -16,9 +16,7 @@ struct ShelfView: View {
             // switch tabs is a button you eventually misclick.
             HStack(spacing: 8) {
                 Button("Добавить", systemImage: "plus") { chooseFiles() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(CurtyTheme.accent)
+                    .buttonStyle(CurtyProminentButtonStyle())
                     .curtyHoverLift()
 
                 Text("Элементов: \(store.items.count)")
@@ -35,8 +33,7 @@ struct ShelfView: View {
                             .font(.caption)
                             .labelStyle(.titleAndIcon)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(CurtySecondaryButtonStyle())
                     .curtyHoverLift()
                     .help("Убрать все файлы с полки")
                 }

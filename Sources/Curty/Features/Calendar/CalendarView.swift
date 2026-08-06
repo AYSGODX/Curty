@@ -76,8 +76,7 @@ struct CalendarView: View {
                                     Spacer()
                                     if meeting.link != nil {
                                         Button("Войти") { store.join(meeting) }
-                                            .buttonStyle(.bordered)
-                                            .controlSize(.small)
+                                            .buttonStyle(CurtySecondaryButtonStyle())
                                     }
                                 }
                                 .padding(9)
@@ -134,9 +133,7 @@ struct CalendarView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button(actionTitle, action: action)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(CurtyTheme.accent)
+                    .buttonStyle(CurtyProminentButtonStyle())
             }
             .frame(maxWidth: .infinity, minHeight: 80)
         }

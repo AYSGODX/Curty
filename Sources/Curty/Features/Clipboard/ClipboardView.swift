@@ -9,11 +9,7 @@ struct ClipboardView: View {
             HStack(spacing: 8) {
                 // The switch belongs next to the state it controls: sitting by
                 // "Очистить" it read as that button's switch.
-                Toggle("", isOn: $preferences.clipboardMonitoringEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .tint(CurtyTheme.accent)
+                CurtySwitch(isOn: $preferences.clipboardMonitoringEnabled)
                     .curtyHoverLift(scale: 1.06)
                     .accessibilityLabel("Наблюдение за буфером обмена")
                     .help(store.isMonitoring ? "Приостановить наблюдение" : "Возобновить наблюдение")
@@ -36,8 +32,7 @@ struct ClipboardView: View {
                             .font(.caption)
                             .labelStyle(.titleAndIcon)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(CurtySecondaryButtonStyle())
                     .curtyHoverLift()
                     .help("Очистить историю буфера")
                 }
@@ -54,8 +49,7 @@ struct ClipboardView: View {
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     Button("Включить") { preferences.clipboardImagesEnabled = true }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .buttonStyle(CurtySecondaryButtonStyle())
                         .curtyHoverLift()
                         .help("Превью будут храниться в памяти; на полку они попадают только по отдельному нажатию")
                 }

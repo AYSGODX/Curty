@@ -12,8 +12,7 @@ struct SnippetsView: View {
                 Button { draft = SnippetDraft(source: nil) } label: {
                     Image(systemName: "plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(CurtyTheme.accent)
+                .buttonStyle(CurtyProminentButtonStyle())
                 .help("Новый сниппет")
             }
             if store.filteredItems.isEmpty {
@@ -133,8 +132,7 @@ private struct SnippetEditor: View {
                 Button("Отмена", action: onCancel)
                 Spacer()
                 Button("Сохранить") { onSave(title, text) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(CurtyTheme.accent)
+                    .buttonStyle(CurtyProminentButtonStyle())
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

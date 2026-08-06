@@ -13,9 +13,7 @@ struct NotesView: View {
                 Button { store.add() } label: {
                     Label("Новая", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(CurtyTheme.accent)
+                .buttonStyle(CurtyProminentButtonStyle())
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(store.items) { note in

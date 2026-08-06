@@ -97,9 +97,7 @@ struct TranslateView: View {
                     .help("Копировать перевод")
                     .accessibilityLabel("Копировать перевод")
                 Button("Перевести") { requestTranslation() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(CurtyTheme.accent)
+                    .buttonStyle(CurtyProminentButtonStyle())
                     .disabled(sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || status == .translating)
             }
         }

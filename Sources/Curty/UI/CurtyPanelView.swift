@@ -29,11 +29,6 @@ struct PanelRootView: View {
             }
         }
         .frame(width: 488, height: 420)
-        // The panel is non-activating, so macOS treats it as an inactive window
-        // and draws every system control in graphite until it is clicked. The
-        // panel is meant to be used without taking focus, so it renders as if
-        // it always had it.
-        .environment(\.controlActiveState, .key)
         .background(colorScheme == .dark ? CurtyTheme.darkBackground : CurtyTheme.warmBackground)
         .clipShape(RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous))
         .overlay(

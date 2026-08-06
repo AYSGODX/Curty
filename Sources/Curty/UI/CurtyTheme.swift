@@ -33,6 +33,109 @@ enum CurtyTheme {
     static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
 }
 
+/// Системные кнопки и переключатели macOS рисуются графитом, пока окно не
+/// станет ключевым, а панель специально не забирает фокус при наведении.
+/// Сказать им обратное через controlActiveState не выходит — они читают
+/// состояние окна напрямую. Поэтому акцентные контролы Curty рисует сама:
+/// обычная заливка Color от активности окна не зависит.
+struct CurtyProminentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Rendered(configuration: configuration)
+    }
+
+    private struct Rendered: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(CurtyTheme.accent.opacity(fill))
+                )
+                .contentShape(Rectangle())
+                .opacity(isEnabled ? 1 : 0.45)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+                }
+        }
+
+        private var fill: Double {
+            if configuration.isPressed { return 0.72 }
+            return isHovering && isEnabled ? 1 : 0.9
+        }
+    }
+}
+
+struct CurtySecondaryButtonStyle: ButtonStyle {
+    var isDestructive = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Rendered(configuration: configuration, isDestructive: isDestructive)
+    }
+
+    private struct Rendered: View {
+        let configuration: Configuration
+        let isDestructive: Bool
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.caption.weight(.medium))
+                .foregroundStyle(isDestructive ? Color.red : .primary)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(.primary.opacity(fill))
+                )
+                .contentShape(Rectangle())
+                .opacity(isEnabled ? 1 : 0.45)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+                }
+        }
+
+        private var fill: Double {
+            if configuration.isPressed { return 0.18 }
+            return isHovering && isEnabled ? 0.13 : 0.075
+        }
+    }
+}
+
+/// Переключатель по той же причине нарисован вручную: системный NSSwitch
+/// теряет акцент вместе с окном.
+struct CurtySwitch: View {
+    @Binding var isOn: Bool
+    var isEnabled = true
+
+    var body: some View {
+        Capsule()
+            .fill(isOn ? CurtyTheme.accent : Color.primary.opacity(0.22))
+            .frame(width: 34, height: 20)
+            .overlay(alignment: isOn ? .trailing : .leading) {
+                Circle()
+                    .fill(.white)
+                    .padding(2)
+                    .shadow(color: .black.opacity(0.22), radius: 1, y: 0.5)
+            }
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? 1 : 0.45)
+            .onTapGesture {
+                guard isEnabled else { return }
+                withAnimation(.easeOut(duration: 0.16)) { isOn.toggle() }
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(isOn ? "включено" : "выключено")
+    }
+}
+
 /// Icon-only action. Bare glyphs give no sign they are clickable, so this lights
 /// up under the pointer and carries a tooltip explaining itself.
 struct CurtyRowButton: View {

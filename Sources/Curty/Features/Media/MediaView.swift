@@ -56,9 +56,7 @@ struct MediaView: View {
                             Button("Разрешить управление") {
                                 store.requestAutomationAccess()
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                            .tint(CurtyTheme.accent)
+                            .buttonStyle(CurtyProminentButtonStyle())
                         }
                     }
                     Spacer(minLength: 0)

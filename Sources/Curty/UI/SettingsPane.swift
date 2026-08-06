@@ -64,7 +64,7 @@ struct SettingsPane: View {
                         Button("Открыть «Объекты входа»") {
                             preferences.openLoginItemsSettings()
                         }
-                        .controlSize(.small)
+                        .buttonStyle(CurtySecondaryButtonStyle())
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -76,7 +76,7 @@ struct SettingsPane: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Вернуть исходный порядок") { model.resetToolOrder() }
-                        .controlSize(.small)
+                        .buttonStyle(CurtySecondaryButtonStyle())
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -86,10 +86,10 @@ struct SettingsPane: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Удалить все локальные данные", role: .destructive) {
+                    Button("Удалить все локальные данные") {
                         isConfirmingDeletion = true
                     }
-                    .controlSize(.small)
+                    .buttonStyle(CurtySecondaryButtonStyle(isDestructive: true))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -194,12 +194,7 @@ private struct SettingsToggleRow: View {
                 .background(stateStyle.color.opacity(0.12), in: Capsule())
                 .contentTransition(.numericText())
 
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .tint(CurtyTheme.accent)
-                .disabled(!isEnabled)
+            CurtySwitch(isOn: $isOn, isEnabled: isEnabled)
         }
         .animation(.easeInOut(duration: 0.16), value: isOn)
         .animation(.easeInOut(duration: 0.16), value: stateLabel)
