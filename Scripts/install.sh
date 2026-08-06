@@ -43,7 +43,10 @@ fi
 DESTINATION="/Applications"
 if [ ! -w "$DESTINATION" ]; then
     DESTINATION="$HOME/Applications"
+    # 755, иначе Launch Services не сможет прочитать пакет и сообщит об этом
+    # как о «пропавшем исполняемом файле», хотя файл на месте.
     mkdir -p "$DESTINATION"
+    chmod u+rwx,go+rx "$DESTINATION" 2>/dev/null || true
     echo "Папка «Программы» недоступна для записи, ставлю в $DESTINATION"
 fi
 TARGET="$DESTINATION/$APP_NAME"
@@ -75,7 +78,22 @@ case "$TARGET" in
 esac
 
 cp -R "$BUILT_APP" "$TARGET"
-open "$TARGET"
+open "$TARGET" 2>/dev/null || true
+sleep 2
+
+# Скопировать пакет мало: если Launch Services не может его прочитать, macOS
+# сообщает «The executable is missing», хотя дело в правах на каталог.
+if ! pgrep -f "$APP_NAME/Contents/MacOS/Curty" >/dev/null 2>&1; then
+    echo
+    echo "Приложение скопировано в $TARGET, но не запустилось." >&2
+    echo >&2
+    echo "Чаще всего Launch Services не может прочитать каталог установки." >&2
+    echo "Права сейчас: $(ls -ld "$DESTINATION" | awk '{print $1}')" >&2
+    echo "Нужен доступ на чтение и выполнение:" >&2
+    echo >&2
+    echo "    chmod go+rx \"$DESTINATION\" && open \"$TARGET\"" >&2
+    exit 1
+fi
 
 echo
 echo "Готово: $TARGET"

@@ -18,13 +18,19 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIRECTORY/Curty" "$APP/Contents/MacOS/Curty"
 cp "$ROOT/Config/Info.plist" "$APP/Contents/Info.plist"
 
-# The icon is built with iconutil rather than actool: actool ships only inside
-# Xcode, while iconutil is part of macOS itself. That is the difference between
-# needing Xcode to build Curty and needing only the command line tools.
-ICONSET="$ROOT/.build/AppIcon.iconset"
-rm -rf "$ICONSET"
-swift "$ROOT/Scripts/generate-icon.swift" "$ICONSET"
-iconutil --convert icns "$ICONSET" --output "$APP/Contents/Resources/AppIcon.icns"
+# The icon ships prebuilt. Building it here meant running iconutil on every
+# machine, and on some systems it rejects the generated iconset outright
+# ("Invalid Iconset") — a hard stop over something entirely static. Use
+# Scripts/generate-icon.swift to regenerate Resources/AppIcon.icns when the
+# artwork itself changes.
+if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
+    cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+else
+    echo "warning: Resources/AppIcon.icns не найден, собираю с системным значком" >&2
+    # Without the file the key would point at nothing, which Launch Services
+    # reports in ways that read like a broken bundle.
+    /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$APP/Contents/Info.plist" 2>/dev/null || true
+fi
 
 # Finder metadata and quarantine attributes are not part of the application
 # payload and make strict code-signature verification fail after packaging.
