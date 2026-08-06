@@ -4,6 +4,13 @@ import CurtyShared
 struct MediaView: View {
     @ObservedObject var store: MediaStore
     @ObservedObject var preferences: Preferences
+    @ObservedObject private var artwork: ArtworkLoader
+
+    init(store: MediaStore, preferences: Preferences) {
+        self.store = store
+        self.preferences = preferences
+        _artwork = ObservedObject(wrappedValue: store.artwork)
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -13,11 +20,19 @@ struct MediaView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(CurtyTheme.accent.opacity(0.14))
                         .overlay {
-                            Image(systemName: "music.note")
-                                .font(.system(size: 25, weight: .medium))
-                                .foregroundStyle(CurtyTheme.accent)
+                            if let cover = artwork.image {
+                                Image(nsImage: cover)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } else {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 25, weight: .medium))
+                                    .foregroundStyle(CurtyTheme.accent)
+                            }
                         }
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .frame(width: 68, height: 68)
+                        .animation(.easeOut(duration: 0.2), value: artwork.image)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(store.snapshot?.title.isEmpty == false ? store.snapshot!.title : "Ничего не играет")
                             .font(.system(size: 15, weight: .semibold))

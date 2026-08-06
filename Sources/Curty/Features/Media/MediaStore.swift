@@ -38,6 +38,12 @@ private enum PlayerKind: CaseIterable {
 
     var durationDivisor: Double { self == .spotify ? 1_000 : 1 }
 
+    /// Only Spotify publishes a cover link; Music deprecated its equivalent and
+    /// leaves the field empty.
+    private var artworkExpression: String {
+        self == .spotify ? "artwork url of currentItem as text" : "\"\""
+    }
+
     var snapshotScript: String {
         """
         tell application id "\(bundleID)"
@@ -47,6 +53,7 @@ private enum PlayerKind: CaseIterable {
             set trackArtist to ""
             set trackAlbum to ""
             set trackDuration to "0"
+            set trackArtwork to ""
             try
                 set trackName to name of currentItem as text
             end try
@@ -59,7 +66,10 @@ private enum PlayerKind: CaseIterable {
             try
                 set trackDuration to duration of currentItem as text
             end try
-            return (player state as text) & separatorCharacter & trackName & separatorCharacter & trackArtist & separatorCharacter & trackAlbum & separatorCharacter & trackDuration & separatorCharacter & (player position as text)
+            try
+                set trackArtwork to \(artworkExpression)
+            end try
+            return (player state as text) & separatorCharacter & trackName & separatorCharacter & trackArtist & separatorCharacter & trackAlbum & separatorCharacter & trackDuration & separatorCharacter & (player position as text) & separatorCharacter & trackArtwork
         end tell
         """
     }
@@ -156,7 +166,7 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
         guard !raw.isEmpty else { return nil }
         let separator = Unicode.Scalar(30).map(String.init) ?? "\u{1E}"
         let parts = raw.components(separatedBy: separator)
-        guard parts.count == 6, !parts[1].isEmpty else { return nil }
+        guard parts.count == 7, !parts[1].isEmpty else { return nil }
         return MediaSnapshot(
             source: player.displayName,
             title: parts[1],
@@ -164,7 +174,8 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
             album: parts[3],
             isPlaying: parts[0].lowercased() == "playing",
             duration: Self.number(parts[4]) / player.durationDivisor,
-            position: Self.number(parts[5])
+            position: Self.number(parts[5]),
+            artworkURL: parts[6]
         )
     }
 
@@ -213,6 +224,8 @@ final class MediaStore: ObservableObject {
     /// first either answers or times out.
     private static let requestTimeout: TimeInterval = 6
 
+    let artwork = ArtworkLoader()
+
     private let adapter = FixedAppleScriptMediaAdapter()
     private let queue = DispatchQueue(label: "dev.curty.media", qos: .userInitiated, attributes: .concurrent)
     private var timer: Timer?
@@ -233,6 +246,7 @@ final class MediaStore: ObservableObject {
         stopPolling()
         isRefreshing = false
         snapshot = nil
+        artwork.clear()
         lastError = nil
         needsAutomationPermission = false
         isEnabled = false
@@ -299,10 +313,12 @@ final class MediaStore: ObservableObject {
                 switch result {
                 case .success(let snapshot):
                     self.snapshot = snapshot
+                    self.artwork.load(from: snapshot?.artworkURL ?? "")
                     self.lastError = nil
                     self.needsAutomationPermission = false
                 case .failure(let error):
                     self.snapshot = nil
+                    self.artwork.clear()
                     self.lastError = error.localizedDescription
                     self.needsAutomationPermission = Self.requiresAutomationPermission(error)
                 }

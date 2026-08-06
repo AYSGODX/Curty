@@ -182,6 +182,18 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(missionControl, SystemOverlayPolicy.overlayWindowCount)
     }
 
+    func testArtworkURLsAreRestrictedToThePlayersImageHost() {
+        XCTAssertNotNil(ArtworkURLPolicy.validate("https://i.scdn.co/image/ab67616d0000b273d1bf"))
+        XCTAssertNotNil(ArtworkURLPolicy.validate("  https://i.scdn.co/image/abc  "))
+
+        XCTAssertNil(ArtworkURLPolicy.validate(""))
+        XCTAssertNil(ArtworkURLPolicy.validate("http://i.scdn.co/image/abc"))
+        XCTAssertNil(ArtworkURLPolicy.validate("https://evil.example/image/abc"))
+        XCTAssertNil(ArtworkURLPolicy.validate("https://i.scdn.co.evil.example/image/abc"))
+        XCTAssertNil(ArtworkURLPolicy.validate("https://user:secret@i.scdn.co/image/abc"))
+        XCTAssertNil(ArtworkURLPolicy.validate("file:///etc/passwd"))
+    }
+
     func testOverlayWindowMustCoverMostOfTheDisplay() {
         let screen = CGSize(width: 1_512, height: 982)
         XCTAssertTrue(SystemOverlayPolicy.coversDisplay(width: 1_512, height: 982, screenSize: screen))

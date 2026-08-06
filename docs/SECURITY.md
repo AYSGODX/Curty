@@ -2,6 +2,8 @@
 
 Curty is sandboxed. It has no telemetry, private frameworks, injected libraries, accessibility event injection, or arbitrary script runner.
 
+Its only network access is outbound https to fetch the album cover of the playing track, confined to `ArtworkLoader.swift` behind a host allowlist. `Scripts/security-check.sh` fails the build if network code appears anywhere else or if that allowlist is removed.
+
 ## Consent boundaries
 
 - Clipboard observation is enabled by default and can be paused from the menu bar.

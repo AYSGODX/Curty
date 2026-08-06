@@ -8,6 +8,9 @@ public struct MediaSnapshot: Codable, Equatable, Sendable {
     public var isPlaying: Bool
     public var duration: Double
     public var position: Double
+    /// Empty unless the player publishes a cover link; the image itself is never
+    /// carried here.
+    public var artworkURL: String
 
     public init(
         source: String,
@@ -16,7 +19,8 @@ public struct MediaSnapshot: Codable, Equatable, Sendable {
         album: String,
         isPlaying: Bool,
         duration: Double,
-        position: Double
+        position: Double,
+        artworkURL: String = ""
     ) {
         self.source = source
         self.title = title
@@ -25,6 +29,7 @@ public struct MediaSnapshot: Codable, Equatable, Sendable {
         self.isPlaying = isPlaying
         self.duration = duration
         self.position = position
+        self.artworkURL = artworkURL
     }
 }
 

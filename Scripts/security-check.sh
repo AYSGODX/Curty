@@ -19,12 +19,27 @@ scan() {
     return "$status"
 }
 
-for pattern in 'PrivateFrameworks' 'MediaRemote' 'DynaLoader' 'dlopen' '/usr/bin/perl' 'CGEvent.*post' 'URLSession' 'NWConnection' 'com.apple.security.network.client'; do
+for pattern in 'PrivateFrameworks' 'MediaRemote' 'DynaLoader' 'dlopen' '/usr/bin/perl' 'CGEvent.*post' 'NWConnection'; do
     if scan "$pattern" "$ROOT/Sources" "$ROOT/Config"; then
         echo "Forbidden capability found: $pattern" >&2
         FAILURES=1
     fi
 done
+
+# Network access exists for one reason only: album covers, which Spotify hands
+# out as a link rather than as image data. The entitlement is therefore expected,
+# but the code using it must stay in one file so it cannot quietly spread.
+ARTWORK_FILE="$ROOT/Sources/Curty/Features/Media/ArtworkLoader.swift"
+NETWORK_USERS="$(grep -rl 'URLSession' "$ROOT/Sources" 2>/dev/null || true)"
+if [ "$NETWORK_USERS" != "$ARTWORK_FILE" ]; then
+    echo "Network code must live only in ArtworkLoader.swift, found: ${NETWORK_USERS:-none}" >&2
+    FAILURES=1
+fi
+
+if ! scan 'approvedHosts' "$ARTWORK_FILE"; then
+    echo "The artwork loader must keep its host allowlist." >&2
+    FAILURES=1
+fi
 
 if ! scan '<key>com.apple.security.app-sandbox</key>' "$ROOT/Config/Curty.entitlements"; then
     echo "Sandbox entitlement is missing." >&2
