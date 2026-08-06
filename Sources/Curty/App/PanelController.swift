@@ -1,4 +1,5 @@
 import AppKit
+import QuickLookUI
 import SwiftUI
 
 enum PanelInteractionPolicy {
@@ -86,6 +87,25 @@ enum SystemOverlayPolicy {
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    // Quick Look looks up the responder chain of the key window for whoever
+    // will feed it. As the window itself, this panel is that responder.
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = QuickLookCoordinator.shared
+            panel.delegate = QuickLookCoordinator.shared
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+            QuickLookCoordinator.shared.previewPanelDidClose()
+        }
+    }
 }
 
 /// The panel belongs to a background app, so it is not the key window when it

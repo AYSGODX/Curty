@@ -8,6 +8,11 @@ enum CurtyTheme {
     static let railButtonSpacing: CGFloat = 6
     static let railButtonCornerRadius: CGFloat = 11
 
+    /// Row actions sit in a fixed-width cluster so the file name always ends at
+    /// the same place instead of being eaten by however many buttons a row has.
+    static let rowActionSize: CGFloat = 28
+    static let rowActionClusterWidth: CGFloat = 92
+
     /// One slot from the centre of one rail button to the next, used to turn a
     /// drag distance into how many places the icon has travelled.
     static var railButtonPitch: CGFloat { railButtonHeight + railButtonSpacing }

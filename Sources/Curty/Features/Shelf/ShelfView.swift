@@ -6,6 +6,8 @@ struct ShelfView: View {
     @ObservedObject var model: AppModel
     @State private var pendingExecutable: ShelfItem?
     @State private var isConfirmingClear = false
+    @State private var selectedID: UUID?
+    @FocusState private var isListFocused: Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -65,36 +67,58 @@ struct ShelfView: View {
                                 Text(item.name)
                                     .font(.system(size: 12, weight: .medium))
                                     .lineLimit(1)
-                                Spacer(minLength: 6)
-                                // Kept as one tight cluster: spread across the
-                                // row's own spacing they were eating the width
-                                // the file name needs.
-                                HStack(spacing: 0) {
-                                    CurtyRowButton(
-                                        systemName: "arrow.up.forward.app",
-                                        title: "Открыть файл"
-                                    ) { requestOpen(item) }
+                                Spacer(minLength: 8)
+                                // Fixed width, so the name column always ends at
+                                // the same place. Opening moved to a double click
+                                // on the row, which left room to make the rest
+                                // big enough not to misclick.
+                                HStack(spacing: 3) {
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
-                                        title: "Копировать файл"
+                                        title: "Копировать файл",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
                                     ) { store.copy(item) }
                                     CurtyRowButton(
                                         systemName: "magnifyingglass",
-                                        title: "Показать в Finder"
+                                        title: "Показать в Finder",
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
                                     ) { revealInFinder(item) }
                                     CurtyRowButton(
                                         systemName: "xmark",
                                         title: "Убрать с полки",
-                                        isDestructive: true
+                                        isDestructive: true,
+                                        size: CurtyTheme.rowActionSize,
+                                        glyphSize: 13
                                     ) { store.remove(item) }
                                 }
+                                .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
-                            .padding(10)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(rowBackground(for: item), in: RoundedRectangle(cornerRadius: 11))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 11)
+                                    .strokeBorder(
+                                        selectedID == item.id ? CurtyTheme.accent.opacity(0.55) : .clear
+                                    )
+                            )
+                            .contentShape(Rectangle())
+                            // Double click opens, single click only selects — the
+                            // selection is what the space bar previews.
+                            .onTapGesture(count: 2) { requestOpen(item) }
+                            .onTapGesture {
+                                selectedID = item.id
+                                isListFocused = true
+                            }
                             // Drag the row straight into Finder or another app.
                             // The receiver reads the file with its own access,
                             // so the bookmark scope does not have to stay open.
-                            .onDrag { NSItemProvider(object: item.url as NSURL) }
+                            .onDrag {
+                                selectedID = item.id
+                                return NSItemProvider(object: item.url as NSURL)
+                            }
                         }
                     }
                 }
@@ -128,6 +152,15 @@ struct ShelfView: View {
         } message: { item in
             Text("«\(item.name)» может запустить код на этом Mac.")
         }
+        .focusable()
+        .focused($isListFocused)
+        // Space previews the selected file and closes the preview again, the
+        // way it behaves in Finder.
+        .onKeyPress(.space) {
+            guard let item = store.items.first(where: { $0.id == selectedID }) else { return .ignored }
+            quickLook(item)
+            return .handled
+        }
         .confirmationDialog(
             "Убрать все файлы с полки?",
             isPresented: $isConfirmingClear
@@ -160,6 +193,16 @@ struct ShelfView: View {
                 store.addUserSelectedFiles(dialog.urls)
             }
         }
+    }
+
+    private func quickLook(_ item: ShelfItem) {
+        var isSecurityScoped = false
+        if case .securityScopedBookmark = item.location { isSecurityScoped = true }
+        QuickLookCoordinator.shared.toggle(item.url, isSecurityScoped: isSecurityScoped)
+    }
+
+    private func rowBackground(for item: ShelfItem) -> Color {
+        selectedID == item.id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
     }
 
     /// Finder comes forward as a result of this, so the panel gets out of the
