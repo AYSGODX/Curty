@@ -64,23 +64,28 @@ struct ShelfView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .lineLimit(1)
                                 Spacer(minLength: 6)
-                                CurtyRowButton(
-                                    systemName: "arrow.up.forward.app",
-                                    title: "Открыть файл"
-                                ) { requestOpen(item) }
-                                CurtyRowButton(
-                                    systemName: "doc.on.doc",
-                                    title: "Копировать файл"
-                                ) { store.copy(item) }
-                                CurtyRowButton(
-                                    systemName: "magnifyingglass",
-                                    title: "Показать в Finder"
-                                ) { revealInFinder(item) }
-                                CurtyRowButton(
-                                    systemName: "xmark",
-                                    title: "Убрать с полки",
-                                    isDestructive: true
-                                ) { store.remove(item) }
+                                // Kept as one tight cluster: spread across the
+                                // row's own spacing they were eating the width
+                                // the file name needs.
+                                HStack(spacing: 0) {
+                                    CurtyRowButton(
+                                        systemName: "arrow.up.forward.app",
+                                        title: "Открыть файл"
+                                    ) { requestOpen(item) }
+                                    CurtyRowButton(
+                                        systemName: "doc.on.doc",
+                                        title: "Копировать файл"
+                                    ) { store.copy(item) }
+                                    CurtyRowButton(
+                                        systemName: "magnifyingglass",
+                                        title: "Показать в Finder"
+                                    ) { revealInFinder(item) }
+                                    CurtyRowButton(
+                                        systemName: "xmark",
+                                        title: "Убрать с полки",
+                                        isDestructive: true
+                                    ) { store.remove(item) }
+                                }
                             }
                             .padding(10)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
@@ -112,7 +117,9 @@ struct ShelfView: View {
             presenting: pendingExecutable
         ) { item in
             Button("Открыть «\(item.name)»", role: .destructive) {
-                store.open(item, allowingExecutables: true)
+                if store.open(item, allowingExecutables: true) {
+                    model.requestPanelClose()
+                }
                 pendingExecutable = nil
             }
             Button("Отмена", role: .cancel) { pendingExecutable = nil }
@@ -160,11 +167,13 @@ struct ShelfView: View {
         model.requestPanelClose()
     }
 
+    /// Opening hands the file to another app, so the panel steps aside — but
+    /// only once the file actually opened, never when the attempt was refused.
     private func requestOpen(_ item: ShelfItem) {
         if item.isPotentiallyExecutable {
             pendingExecutable = item
-        } else {
-            store.open(item)
+        } else if store.open(item) {
+            model.requestPanelClose()
         }
     }
 }

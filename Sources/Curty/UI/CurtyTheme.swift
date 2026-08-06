@@ -39,7 +39,7 @@ struct CurtyRowButton: View {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(width: 26, height: 24)
+                .frame(width: 24, height: 24)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(isHovering ? tint.opacity(0.16) : .clear)
