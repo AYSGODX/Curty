@@ -49,7 +49,17 @@ enum PanelInteractionPolicy {
 enum SystemOverlayPolicy {
     static let coverageThreshold: CGFloat = 0.5
 
-    static func isCoveringWindow(width: CGFloat, height: CGFloat, screenSize: CGSize) -> Bool {
+    /// The Dock also owns the wallpaper, which covers the whole screen and sits
+    /// far below the ordinary window layer. Judging by size alone, a bare
+    /// desktop looked exactly like Mission Control and the notch went dead, so
+    /// the window has to be above normal windows to count as an overlay.
+    static func isOverlayWindow(
+        layer: Int,
+        width: CGFloat,
+        height: CGFloat,
+        screenSize: CGSize
+    ) -> Bool {
+        guard layer > 0 else { return false }
         let screenArea = screenSize.width * screenSize.height
         guard screenArea > 0 else { return false }
         return width * height >= screenArea * coverageThreshold
@@ -63,10 +73,11 @@ enum SystemOverlayPolicy {
 
         return windows.contains { window in
             guard window[kCGWindowOwnerName as String] as? String == "Dock",
+                  let layer = window[kCGWindowLayer as String] as? Int,
                   let bounds = window[kCGWindowBounds as String] as? [String: Any],
                   let width = bounds["Width"] as? CGFloat,
                   let height = bounds["Height"] as? CGFloat else { return false }
-            return isCoveringWindow(width: width, height: height, screenSize: screenSize)
+            return isOverlayWindow(layer: layer, width: width, height: height, screenSize: screenSize)
         }
     }
 }

@@ -2,7 +2,11 @@ import SwiftUI
 
 private struct RailDrag: Equatable {
     let tool: AppModel.Tool
+    let originIndex: Int
     let targetIndex: Int
+    /// Kept continuous so the dragged icon can sit between slots instead of
+    /// jumping from one to the next.
+    let translation: CGFloat
     /// False until the pointer has travelled far enough to mean "move", which
     /// is what keeps a plain click from being read as a one-slot drag.
     let isReordering: Bool
@@ -32,17 +36,26 @@ struct PanelRootView: View {
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.18), radius: 28, y: 14)
     }
 
-    /// While an icon is being dragged the rail renders the order it would end up
-    /// in. The arrangement itself is the feedback, so there is no separate
-    /// insertion marker that can fail to show up between the buttons.
-    private var displayedTools: [AppModel.Tool] {
-        guard let drag, drag.isReordering else { return model.orderedTools }
-        return ToolOrderPolicy.move(drag.tool, toIndex: drag.targetIndex, in: model.orderedTools)
+    /// The dragged icon follows the pointer exactly; the others step aside by a
+    /// whole slot. Reordering the array instead would snap the icon from slot to
+    /// slot, which is what made the drag feel jerky.
+    private func railOffset(for section: AppModel.Tool, at index: Int) -> CGFloat {
+        guard let drag, drag.isReordering else { return 0 }
+        if section == drag.tool { return drag.translation }
+
+        if drag.originIndex < drag.targetIndex, index > drag.originIndex, index <= drag.targetIndex {
+            return -CurtyTheme.railButtonPitch
+        }
+        if drag.originIndex > drag.targetIndex, index >= drag.targetIndex, index < drag.originIndex {
+            return CurtyTheme.railButtonPitch
+        }
+        return 0
     }
 
-    private func toolButton(_ section: AppModel.Tool) -> some View {
+    private func toolButton(_ section: AppModel.Tool, at index: Int) -> some View {
         let isLifted = drag?.tool == section && drag?.isReordering == true
         let isSelected = model.selectedTool == section
+        let offsetY = railOffset(for: section, at: index)
 
         return Image(systemName: section.symbol)
             .font(.system(size: 15, weight: .medium))
@@ -57,6 +70,10 @@ struct PanelRootView: View {
             .contentShape(Rectangle())
             .scaleEffect(isLifted ? 1.08 : 1)
             .shadow(color: .black.opacity(isLifted ? 0.35 : 0), radius: isLifted ? 7 : 0, y: isLifted ? 3 : 0)
+            .offset(y: offsetY)
+            // The icon under the pointer must not lag behind it, so only the
+            // ones stepping aside are animated.
+            .animation(isLifted ? nil : .easeOut(duration: 0.16), value: offsetY)
             .zIndex(isLifted ? 1 : 0)
             .gesture(reorderGesture(for: section))
             .help(section.title)
@@ -74,13 +91,14 @@ struct PanelRootView: View {
                 guard let origin = model.orderedTools.firstIndex(of: section) else { return }
                 let steps = Int((value.translation.height / CurtyTheme.railButtonPitch).rounded())
                 let target = min(max(0, origin + steps), model.orderedTools.count - 1)
-                let next = RailDrag(
+                // Deliberately unanimated: this is the pointer's own position.
+                drag = RailDrag(
                     tool: section,
+                    originIndex: origin,
                     targetIndex: target,
+                    translation: value.translation.height,
                     isReordering: abs(value.translation.height) > CurtyTheme.railDragThreshold
                 )
-                guard next != drag else { return }
-                withAnimation(.easeOut(duration: 0.14)) { drag = next }
             }
             .onEnded { _ in
                 let finished = drag
@@ -110,8 +128,8 @@ struct PanelRootView: View {
 
             Spacer().frame(height: 3)
 
-            ForEach(displayedTools) { section in
-                toolButton(section)
+            ForEach(Array(model.orderedTools.enumerated()), id: \.element) { index, section in
+                toolButton(section, at: index)
             }
 
             Spacer(minLength: 4)

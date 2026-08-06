@@ -170,13 +170,22 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(Set(CalendarStore.Horizon.allCases.map(\.title)), ["Сутки", "Неделя"])
     }
 
-    func testSystemOverlayNeedsAScreenCoveringWindow() {
+    func testSystemOverlayNeedsAScreenCoveringWindowAboveNormalWindows() {
         let screen = CGSize(width: 1_512, height: 982)
 
-        XCTAssertTrue(SystemOverlayPolicy.isCoveringWindow(width: 1_512, height: 982, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isCoveringWindow(width: 1_512, height: 90, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isCoveringWindow(width: 120, height: 982, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isCoveringWindow(width: 1_512, height: 982, screenSize: .zero))
+        // Mission Control draws at these layers.
+        XCTAssertTrue(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 982, screenSize: screen))
+        XCTAssertTrue(SystemOverlayPolicy.isOverlayWindow(layer: 18, width: 1_512, height: 982, screenSize: screen))
+
+        // The Dock's wallpaper is full screen too, but sits at desktop level:
+        // counting it made a bare desktop look like Mission Control.
+        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: -2_147_483_622, width: 1_512, height: 982, screenSize: screen))
+        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 0, width: 1_512, height: 982, screenSize: screen))
+
+        // The Dock strip itself is above normal windows but nowhere near full screen.
+        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 90, screenSize: screen))
+        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 120, height: 982, screenSize: screen))
+        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 982, screenSize: .zero))
     }
 
     func testLaunchAtLoginRecognizesSupportedApplicationFolders() {
