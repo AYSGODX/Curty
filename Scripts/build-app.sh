@@ -18,21 +18,13 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIRECTORY/Curty" "$APP/Contents/MacOS/Curty"
 cp "$ROOT/Config/Info.plist" "$APP/Contents/Info.plist"
 
-ASSET_CATALOG="$ROOT/.build/CurtyAssets.xcassets"
-APP_ICON_SET="$ASSET_CATALOG/AppIcon.appiconset"
-COMPILED_ASSETS="$ROOT/.build/CompiledAssets"
-ASSET_INFO="$ROOT/.build/AssetInfo.plist"
-swift "$ROOT/Scripts/generate-icon.swift" "$APP_ICON_SET"
-rm -rf "$COMPILED_ASSETS"
-mkdir -p "$COMPILED_ASSETS"
-xcrun actool \
-    --compile "$COMPILED_ASSETS" \
-    --platform macosx \
-    --minimum-deployment-target 15.0 \
-    --app-icon AppIcon \
-    --output-partial-info-plist "$ASSET_INFO" \
-    "$ASSET_CATALOG"
-cp -R "$COMPILED_ASSETS/." "$APP/Contents/Resources/"
+# The icon is built with iconutil rather than actool: actool ships only inside
+# Xcode, while iconutil is part of macOS itself. That is the difference between
+# needing Xcode to build Curty and needing only the command line tools.
+ICONSET="$ROOT/.build/AppIcon.iconset"
+rm -rf "$ICONSET"
+swift "$ROOT/Scripts/generate-icon.swift" "$ICONSET"
+iconutil --convert icns "$ICONSET" --output "$APP/Contents/Resources/AppIcon.icns"
 
 # Finder metadata and quarantine attributes are not part of the application
 # payload and make strict code-signature verification fail after packaging.
