@@ -24,29 +24,35 @@ enum CurtyTheme {
     static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
 }
 
-/// Icon-only action in a list row. Bare glyphs give no sign they are clickable,
-/// so this lights up under the pointer and carries a tooltip explaining itself.
+/// Icon-only action. Bare glyphs give no sign they are clickable, so this lights
+/// up under the pointer and carries a tooltip explaining itself.
 struct CurtyRowButton: View {
     let systemName: String
     let title: String
     var isDestructive = false
+    var size: CGFloat = 24
+    var glyphSize: CGFloat = 12
+    var isEnabled = true
     let action: () -> Void
 
     @State private var isHovering = false
 
+    private var isLit: Bool { isHovering && isEnabled }
+
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: glyphSize, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(width: 24, height: 24)
+                .frame(width: size, height: size)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isHovering ? tint.opacity(0.16) : .clear)
+                    RoundedRectangle(cornerRadius: size / 4, style: .continuous)
+                        .fill(isLit ? tint.opacity(0.16) : .clear)
                 )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
         }
@@ -55,8 +61,31 @@ struct CurtyRowButton: View {
     }
 
     private var tint: Color {
+        guard isEnabled else { return .secondary }
         if isDestructive { return isHovering ? .red : .secondary }
         return isHovering ? CurtyTheme.accent : .secondary
+    }
+}
+
+/// Hover feedback for controls that draw themselves — system buttons, switches —
+/// where a background of our own cannot be slipped underneath.
+private struct CurtyHoverLift: ViewModifier {
+    var scale: CGFloat
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .brightness(isHovering ? 0.09 : 0)
+            .scaleEffect(isHovering ? scale : 1)
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+            }
+    }
+}
+
+extension View {
+    func curtyHoverLift(scale: CGFloat = 1.04) -> some View {
+        modifier(CurtyHoverLift(scale: scale))
     }
 }
 

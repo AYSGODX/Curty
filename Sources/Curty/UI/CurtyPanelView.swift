@@ -17,6 +17,7 @@ struct PanelRootView: View {
     @ObservedObject var model: AppModel
     @State private var drag: RailDrag?
     @State private var isDropTarget = false
+    @State private var hoveredTool: AppModel.Tool?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -79,6 +80,25 @@ struct PanelRootView: View {
         return 0
     }
 
+    private func setHover(_ section: AppModel.Tool, _ hovering: Bool) {
+        if hovering {
+            hoveredTool = section
+        } else if hoveredTool == section {
+            hoveredTool = nil
+        }
+    }
+
+    private func railTint(isSelected: Bool, isHovered: Bool) -> Color {
+        if isSelected { return .white }
+        return isHovered ? .primary : .secondary
+    }
+
+    private func railBackground(isSelected: Bool, isLifted: Bool, isHovered: Bool) -> Color {
+        if isSelected { return CurtyTheme.accent }
+        if isLifted { return .primary.opacity(0.14) }
+        return isHovered ? .primary.opacity(0.09) : .clear
+    }
+
     private func toolButton(_ section: AppModel.Tool, at index: Int) -> some View {
         let isLifted = drag?.tool == section && drag?.isReordering == true
         let isSelected = model.selectedTool == section
@@ -87,11 +107,18 @@ struct PanelRootView: View {
         return Image(systemName: section.symbol)
             .font(.system(size: 15, weight: .medium))
             .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
-            .foregroundStyle(isSelected ? .white : .secondary)
+            .foregroundStyle(railTint(isSelected: isSelected, isHovered: hoveredTool == section))
             .background(
                 RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
-                    .fill(isSelected ? CurtyTheme.accent : (isLifted ? Color.primary.opacity(0.14) : .clear))
+                    .fill(railBackground(
+                        isSelected: isSelected,
+                        isLifted: isLifted,
+                        isHovered: hoveredTool == section
+                    ))
             )
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) { setHover(section, hovering) }
+            }
             // A frame alone is not hit-testable where it is transparent, so
             // without this only the glyph itself would answer the pointer.
             .contentShape(Rectangle())
@@ -171,12 +198,22 @@ struct PanelRootView: View {
                 Image(systemName: AppModel.Tool.settings.symbol)
                     .font(.system(size: 15, weight: .medium))
                     .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
-                    .foregroundStyle(model.selectedTool == .settings ? .white : .secondary)
+                    .foregroundStyle(railTint(
+                        isSelected: model.selectedTool == .settings,
+                        isHovered: hoveredTool == .settings
+                    ))
                     .background(
                         RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
-                            .fill(model.selectedTool == .settings ? CurtyTheme.accent : .clear)
+                            .fill(railBackground(
+                                isSelected: model.selectedTool == .settings,
+                                isLifted: false,
+                                isHovered: hoveredTool == .settings
+                            ))
                     )
                     .contentShape(Rectangle())
+                    .onHover { hovering in
+                        withAnimation(.easeOut(duration: 0.12)) { setHover(.settings, hovering) }
+                    }
             }
             .buttonStyle(.plain)
             .help("Настройки")

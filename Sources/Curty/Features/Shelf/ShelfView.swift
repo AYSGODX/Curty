@@ -17,6 +17,7 @@ struct ShelfView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(CurtyTheme.accent)
+                    .curtyHoverLift()
 
                 Text("Элементов: \(store.items.count)")
                     .font(.caption)
@@ -34,6 +35,7 @@ struct ShelfView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .curtyHoverLift()
                     .help("Убрать все файлы с полки")
                 }
             }

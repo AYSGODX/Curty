@@ -40,17 +40,17 @@ struct MediaView: View {
                             .font(.caption)
                             .foregroundStyle(store.lastError == nil ? Color.secondary : Color.orange)
                             .lineLimit(2)
-                        HStack(spacing: 18) {
-                            mediaButton(.previous, symbol: "backward.fill")
+                        HStack(spacing: 4) {
+                            mediaButton(.previous, symbol: "backward.fill", title: "Предыдущий трек")
                             mediaButton(
                                 .togglePlayPause,
-                                symbol: store.snapshot?.isPlaying == true ? "pause.fill" : "play.fill"
+                                symbol: store.snapshot?.isPlaying == true ? "pause.fill" : "play.fill",
+                                title: store.snapshot?.isPlaying == true ? "Пауза" : "Воспроизвести",
+                                glyphSize: 16
                             )
-                            .font(.system(size: 17))
-                            mediaButton(.next, symbol: "forward.fill")
+                            mediaButton(.next, symbol: "forward.fill", title: "Следующий трек")
                         }
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 5)
+                        .padding(.top, 3)
 
                         if store.needsAutomationPermission {
                             Button("Разрешить управление") {
@@ -95,10 +95,21 @@ struct MediaView: View {
         return [snapshot.artist, snapshot.album].filter { !$0.isEmpty }.joined(separator: " — ")
     }
 
-    private func mediaButton(_ command: MediaCommand, symbol: String) -> some View {
-        Button { store.perform(command) } label: { Image(systemName: symbol) }
-            .buttonStyle(.plain)
-            .disabled(!store.isEnabled || store.snapshot == nil)
+    private func mediaButton(
+        _ command: MediaCommand,
+        symbol: String,
+        title: String,
+        glyphSize: CGFloat = 13
+    ) -> some View {
+        CurtyRowButton(
+            systemName: symbol,
+            title: title,
+            size: 30,
+            glyphSize: glyphSize,
+            isEnabled: store.isEnabled && store.snapshot != nil
+        ) {
+            store.perform(command)
+        }
     }
 
     private func compactAction(_ title: String, icon: String) -> some View {

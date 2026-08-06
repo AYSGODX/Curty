@@ -14,7 +14,9 @@ struct ClipboardView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(CurtyTheme.accent)
+                    .curtyHoverLift(scale: 1.06)
                     .accessibilityLabel("Наблюдение за буфером обмена")
+                    .help(store.isMonitoring ? "Приостановить наблюдение" : "Возобновить наблюдение")
 
                 Label(
                     store.isMonitoring ? "Наблюдение включено" : "Наблюдение приостановлено",
@@ -36,6 +38,7 @@ struct ClipboardView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .curtyHoverLift()
                     .help("Очистить историю буфера")
                 }
             }
@@ -71,20 +74,24 @@ struct ClipboardView: View {
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
-                                Spacer()
-                                Button { store.copy(entry) } label: { Image(systemName: "doc.on.doc") }
-                                    .buttonStyle(.plain)
-                                    .help("Копировать")
-                                if case .image = entry.payload {
-                                    Button { store.saveImage(entry) } label: { Image(systemName: "tray.and.arrow.down") }
-                                        .buttonStyle(.plain)
-                                        .help("Сохранить на полку")
-                                        .accessibilityLabel("Сохранить изображение на полку")
+                                Spacer(minLength: 6)
+                                HStack(spacing: 0) {
+                                    CurtyRowButton(
+                                        systemName: "doc.on.doc",
+                                        title: "Вернуть в буфер обмена"
+                                    ) { store.copy(entry) }
+                                    if case .image = entry.payload {
+                                        CurtyRowButton(
+                                            systemName: "tray.and.arrow.down",
+                                            title: "Сохранить изображение на полку"
+                                        ) { store.saveImage(entry) }
+                                    }
+                                    CurtyRowButton(
+                                        systemName: "xmark",
+                                        title: "Убрать из истории",
+                                        isDestructive: true
+                                    ) { store.remove(entry) }
                                 }
-                                Button { store.remove(entry) } label: { Image(systemName: "xmark") }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
-                                    .help("Удалить")
                             }
                             .padding(10)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
