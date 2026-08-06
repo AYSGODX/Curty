@@ -170,22 +170,13 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(Set(CalendarStore.Horizon.allCases.map(\.title)), ["Сутки", "Неделя"])
     }
 
-    func testSystemOverlayNeedsAScreenCoveringWindowAboveNormalWindows() {
-        let screen = CGSize(width: 1_512, height: 982)
-
-        // Mission Control draws at these layers.
-        XCTAssertTrue(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 982, screenSize: screen))
-        XCTAssertTrue(SystemOverlayPolicy.isOverlayWindow(layer: 18, width: 1_512, height: 982, screenSize: screen))
-
-        // The Dock's wallpaper is full screen too, but sits at desktop level:
-        // counting it made a bare desktop look like Mission Control.
-        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: -2_147_483_622, width: 1_512, height: 982, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 0, width: 1_512, height: 982, screenSize: screen))
-
-        // The Dock strip itself is above normal windows but nowhere near full screen.
-        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 90, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 120, height: 982, screenSize: screen))
-        XCTAssertFalse(SystemOverlayPolicy.isOverlayWindow(layer: 20, width: 1_512, height: 982, screenSize: .zero))
+    func testHoverDwellIsShortEnoughToFeelImmediate() {
+        // Long enough that a pointer crossing the notch does not open the panel,
+        // short enough that a deliberate hover still feels instant.
+        XCTAssertGreaterThanOrEqual(PanelInteractionPolicy.hoverDwell, 0.1)
+        XCTAssertLessThanOrEqual(PanelInteractionPolicy.hoverDwell, 0.25)
+        // The idle poll has to be able to observe the dwell elapsing.
+        XCTAssertLessThanOrEqual(PanelInteractionPolicy.idleSampleInterval, PanelInteractionPolicy.hoverDwell)
     }
 
     func testLaunchAtLoginRecognizesSupportedApplicationFolders() {
