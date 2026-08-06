@@ -1,0 +1,8 @@
+.build/
+build/
+.omc/
+.claude/
+.DS_Store
+*.xcarchive
+*.dmg
+*.zip

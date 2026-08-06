@@ -1,0 +1,382 @@
+import AppKit
+import Foundation
+import CurtyShared
+
+/// Seek is the only media command that carries a value, so the value can never
+/// be allowed to reach the script as anything but bare digits: clamped to the
+/// track, and formatted without a locale so a Russian system cannot turn the
+/// separator into a comma the way it does for `player position as text`.
+enum MediaSeekPolicy {
+    static func clamp(_ seconds: Double, duration: Double) -> Double {
+        guard seconds.isFinite, duration.isFinite, duration > 0 else { return 0 }
+        return min(max(0, seconds), duration)
+    }
+
+    static func format(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "0.000" }
+        return String(format: "%.3f", seconds)
+    }
+}
+
+private enum PlayerKind: CaseIterable {
+    case spotify
+    case music
+
+    var bundleID: String {
+        switch self {
+        case .spotify: return "com.spotify.client"
+        case .music: return "com.apple.Music"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .spotify: return "Spotify"
+        case .music: return "Music"
+        }
+    }
+
+    var durationDivisor: Double { self == .spotify ? 1_000 : 1 }
+
+    var snapshotScript: String {
+        """
+        tell application id "\(bundleID)"
+            set separatorCharacter to ASCII character 30
+            set currentItem to current track
+            set trackName to ""
+            set trackArtist to ""
+            set trackAlbum to ""
+            set trackDuration to "0"
+            try
+                set trackName to name of currentItem as text
+            end try
+            try
+                set trackArtist to artist of currentItem as text
+            end try
+            try
+                set trackAlbum to album of currentItem as text
+            end try
+            try
+                set trackDuration to duration of currentItem as text
+            end try
+            return (player state as text) & separatorCharacter & trackName & separatorCharacter & trackArtist & separatorCharacter & trackAlbum & separatorCharacter & trackDuration & separatorCharacter & (player position as text)
+        end tell
+        """
+    }
+
+    func seekScript(toSeconds seconds: Double) -> String {
+        """
+        tell application id "\(bundleID)"
+            set player position to \(MediaSeekPolicy.format(seconds))
+        end tell
+        """
+    }
+
+    func commandScript(_ command: MediaCommand) -> String {
+        let body: String
+        switch command {
+        case .togglePlayPause: body = "playpause"
+        case .next: body = "next track"
+        case .previous: body = self == .music ? "back track" : "previous track"
+        }
+        return """
+        tell application id "\(bundleID)"
+            \(body)
+        end tell
+        """
+    }
+}
+
+private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
+    private typealias Candidate = (player: PlayerKind, snapshot: MediaSnapshot)
+
+    func snapshot() throws -> MediaSnapshot? {
+        let candidates = try collectCandidates()
+        return candidates.first(where: { $0.snapshot.isPlaying })?.snapshot ?? candidates.first?.snapshot
+    }
+
+    func perform(_ command: MediaCommand) throws {
+        let candidates = try collectCandidates()
+        guard let player = candidates.first(where: { $0.snapshot.isPlaying })?.player ?? candidates.first?.player else {
+            throw AdapterError.noSupportedPlayer
+        }
+        _ = try execute(player.commandScript(command))
+    }
+
+    func seek(to seconds: Double) throws {
+        let candidates = try collectCandidates()
+        guard let player = candidates.first(where: { $0.snapshot.isPlaying })?.player ?? candidates.first?.player else {
+            throw AdapterError.noSupportedPlayer
+        }
+        _ = try execute(player.seekScript(toSeconds: seconds))
+    }
+
+    // Sending the event is what makes macOS show the Automation consent
+    // prompt. AEDeterminePermissionToAutomateTarget looks like the polite way
+    // to ask first, but it never returns for these targets: it blocks on an
+    // internal semaphore, which wedged every later refresh behind isRefreshing.
+    func requestAutomationAccess() throws {
+        for player in PlayerKind.allCases {
+            do {
+                _ = try execute(player.snapshotScript)
+                return
+            } catch AdapterError.appleScript(let code) where code == -600 || code == -1_728 {
+                continue
+            }
+        }
+        throw AdapterError.noSupportedPlayer
+    }
+
+    private func collectCandidates() throws -> [Candidate] {
+        var candidates: [Candidate] = []
+        var firstError: Error?
+        for player in PlayerKind.allCases {
+            do {
+                if let snapshot = try snapshot(for: player) {
+                    candidates.append((player, snapshot))
+                    if snapshot.isPlaying { return candidates }
+                }
+            } catch {
+                if firstError == nil { firstError = error }
+            }
+        }
+
+        if candidates.isEmpty, let firstError { throw firstError }
+        return candidates
+    }
+
+    private func snapshot(for player: PlayerKind) throws -> MediaSnapshot? {
+        let raw: String
+        do {
+            raw = try execute(player.snapshotScript)
+        } catch AdapterError.appleScript(let code) where code == -1_728 || code == -600 {
+            return nil
+        }
+
+        guard !raw.isEmpty else { return nil }
+        let separator = Unicode.Scalar(30).map(String.init) ?? "\u{1E}"
+        let parts = raw.components(separatedBy: separator)
+        guard parts.count == 6, !parts[1].isEmpty else { return nil }
+        return MediaSnapshot(
+            source: player.displayName,
+            title: parts[1],
+            artist: parts[2],
+            album: parts[3],
+            isPlaying: parts[0].lowercased() == "playing",
+            duration: Self.number(parts[4]) / player.durationDivisor,
+            position: Self.number(parts[5])
+        )
+    }
+
+    /// AppleScript renders reals with the current locale's decimal separator,
+    /// so a Russian system returns "163,98" and plain Double(_:) yields nil.
+    private static func number(_ text: String) -> Double {
+        Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private func execute(_ source: String) throws -> String {
+        var error: NSDictionary?
+        let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error, let code = error[NSAppleScript.errorNumber] as? Int, code != 0 {
+            throw AdapterError.appleScript(code: code)
+        }
+        return descriptor?.stringValue ?? ""
+    }
+
+    enum AdapterError: LocalizedError {
+        case noSupportedPlayer
+        case appleScript(code: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .noSupportedPlayer: return "Music и Spotify сейчас не запущены."
+            case .appleScript(let code) where code == -1_744:
+                return "Нужно один раз разрешить Curty управлять Spotify или Music."
+            case .appleScript(let code) where code == -1_743:
+                return "Разрешите Curty управлять Spotify или Music в Системных настройках → Конфиденциальность и безопасность → Автоматизация."
+            case .appleScript(let code): return "macOS отклонила команду медиаплееру (\(code))."
+            }
+        }
+    }
+}
+
+@MainActor
+final class MediaStore: ObservableObject {
+    @Published private(set) var snapshot: MediaSnapshot?
+    @Published private(set) var isEnabled = false
+    @Published private(set) var needsAutomationPermission = false
+    @Published var lastError: String?
+
+    /// A hung script must not be able to block the ones after it, so the queue
+    /// is concurrent. In practice at most one stuck call ever overlaps a live
+    /// one, because `beginRequest` still refuses a second request until the
+    /// first either answers or times out.
+    private static let requestTimeout: TimeInterval = 6
+
+    private let adapter = FixedAppleScriptMediaAdapter()
+    private let queue = DispatchQueue(label: "dev.curty.media", qos: .userInitiated, attributes: .concurrent)
+    private var timer: Timer?
+    private var isRefreshing = false
+    private var requestStartedAt: TimeInterval = 0
+    private var generation = 0
+    private var isPanelVisible = false
+
+    func start() {
+        guard !isEnabled else { return }
+        generation += 1
+        isEnabled = true
+        updatePolling()
+    }
+
+    func stop() {
+        generation += 1
+        stopPolling()
+        isRefreshing = false
+        snapshot = nil
+        lastError = nil
+        needsAutomationPermission = false
+        isEnabled = false
+    }
+
+    /// Every snapshot costs an AppleScript round trip to Music and Spotify, and
+    /// the result is only ever shown inside the panel. Polling therefore runs
+    /// while the panel is on screen and stops as soon as it hides.
+    func setPanelVisible(_ visible: Bool) {
+        guard isPanelVisible != visible else { return }
+        isPanelVisible = visible
+        updatePolling()
+    }
+
+    private func updatePolling() {
+        if isEnabled, isPanelVisible {
+            startPolling()
+        } else {
+            stopPolling()
+        }
+    }
+
+    private func startPolling() {
+        refresh()
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    private func stopPolling() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// A script that never returns used to pin `isRefreshing` forever, which
+    /// silently killed every later poll and left the panel on "Ищем трек…"
+    /// until the app was restarted. Past the timeout the in-flight request is
+    /// abandoned: its generation is retired so a late reply cannot land, and a
+    /// fresh request takes over.
+    private func beginRequest() -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        if isRefreshing {
+            guard now - requestStartedAt >= Self.requestTimeout else { return false }
+            generation += 1
+        }
+        isRefreshing = true
+        requestStartedAt = now
+        return true
+    }
+
+    func refresh() {
+        guard isEnabled, beginRequest() else { return }
+        let adapter = self.adapter
+        let requestGeneration = generation
+        queue.async { [weak self] in
+            let result = Result { try adapter.snapshot() }
+            Task { @MainActor in
+                guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                self.isRefreshing = false
+                switch result {
+                case .success(let snapshot):
+                    self.snapshot = snapshot
+                    self.lastError = nil
+                    self.needsAutomationPermission = false
+                case .failure(let error):
+                    self.snapshot = nil
+                    self.lastError = error.localizedDescription
+                    self.needsAutomationPermission = Self.requiresAutomationPermission(error)
+                }
+            }
+        }
+    }
+
+    func requestAutomationAccess() {
+        guard isEnabled, beginRequest() else { return }
+        let adapter = self.adapter
+        let requestGeneration = generation
+        queue.async { [weak self] in
+            let result = Result { try adapter.requestAutomationAccess() }
+            Task { @MainActor in
+                guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                self.isRefreshing = false
+                switch result {
+                case .success:
+                    self.lastError = nil
+                    self.needsAutomationPermission = false
+                    self.refresh()
+                case .failure(let error):
+                    self.lastError = error.localizedDescription
+                    self.needsAutomationPermission = Self.requiresAutomationPermission(error)
+                }
+            }
+        }
+    }
+
+    func perform(_ command: MediaCommand) {
+        guard isEnabled else { return }
+        let adapter = self.adapter
+        let requestGeneration = generation
+        queue.async { [weak self] in
+            let result = Result { try adapter.perform(command) }
+            Task { @MainActor in
+                guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                switch result {
+                case .success:
+                    self.lastError = nil
+                    self.refresh()
+                case .failure(let error):
+                    self.lastError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func seek(to seconds: Double) {
+        guard isEnabled, let current = snapshot, current.duration > 0 else { return }
+        let target = MediaSeekPolicy.clamp(seconds, duration: current.duration)
+        // Move the scrubber right away; the next poll confirms it a second later.
+        snapshot?.position = target
+        let adapter = self.adapter
+        let requestGeneration = generation
+        queue.async { [weak self] in
+            let result = Result { try adapter.seek(to: target) }
+            Task { @MainActor in
+                guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                switch result {
+                case .success:
+                    self.lastError = nil
+                    self.refresh()
+                case .failure(let error):
+                    self.lastError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private static func requiresAutomationPermission(_ error: Error) -> Bool {
+        guard case let FixedAppleScriptMediaAdapter.AdapterError.appleScript(code) = error else {
+            return false
+        }
+        return code == -1_743 || code == -1_744
+    }
+}
