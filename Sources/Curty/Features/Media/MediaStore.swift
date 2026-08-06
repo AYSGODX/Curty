@@ -100,6 +100,14 @@ private enum PlayerKind: CaseIterable {
 private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
     private typealias Candidate = (player: PlayerKind, snapshot: MediaSnapshot)
 
+    /// An Apple Event sent to an app that is not running launches it. Curty
+    /// polls once a second, so without this check closing Music simply started
+    /// it again a second later. Nothing may be asked of a player that is not
+    /// already there.
+    private func isRunning(_ player: PlayerKind) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: player.bundleID).isEmpty
+    }
+
     func snapshot() throws -> MediaSnapshot? {
         let candidates = try collectCandidates()
         return candidates.first(where: { $0.snapshot.isPlaying })?.snapshot ?? candidates.first?.snapshot
@@ -126,7 +134,7 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
     // to ask first, but it never returns for these targets: it blocks on an
     // internal semaphore, which wedged every later refresh behind isRefreshing.
     func requestAutomationAccess() throws {
-        for player in PlayerKind.allCases {
+        for player in PlayerKind.allCases where isRunning(player) {
             do {
                 _ = try execute(player.snapshotScript)
                 return
@@ -156,6 +164,8 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
     }
 
     private func snapshot(for player: PlayerKind) throws -> MediaSnapshot? {
+        guard isRunning(player) else { return nil }
+
         let raw: String
         do {
             raw = try execute(player.snapshotScript)
