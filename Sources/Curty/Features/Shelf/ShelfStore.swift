@@ -52,7 +52,12 @@ final class ShelfStore: ObservableObject {
                     at: 0
                 )
             } catch {
-                lastError = "Не удалось сохранить доступ к \(url.lastPathComponent): \(error.localizedDescription)"
+                // Локализованный текст один и тот же для десятка разных причин,
+                // поэтому домен и код показываем прямо в интерфейсе: без них
+                // разбор такой ошибки на чужой машине превращается в гадание.
+                let failure = error as NSError
+                lastError = "Не удалось сохранить доступ к \(url.lastPathComponent): "
+                    + "\(failure.localizedDescription) [\(failure.domain) \(failure.code)]"
             }
         }
         persist()
