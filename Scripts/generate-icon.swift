@@ -1,129 +1,153 @@
 #!/usr/bin/swift
+// Собирает Resources/AppIcon.icns из одного исходника — знака на прозрачном фоне.
+//
+// iconutil здесь не используется намеренно: на macOS 26 он отвергает
+// сгенерированный набор с «Invalid Iconset» и рвёт установку. Файл пишется
+// напрямую через ImageIO.
+//
+//   Scripts/generate-icon.swift Resources/Logo.png Resources/AppIcon.icns
+//
+// Третьим аргументом можно попросить лист предпросмотра: знак в реальных
+// размерах и плитка так, как она выглядит в шторке.
 import AppKit
-import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
-guard CommandLine.arguments.count == 2 else {
-    fputs("usage: generate-icon.swift /path/to/AppIcon.iconset\n", stderr)
+let arguments = CommandLine.arguments
+guard arguments.count >= 3 else {
+    fputs("usage: generate-icon.swift <logo.png> <AppIcon.icns> [preview.png]\n", stderr)
     exit(64)
 }
 
-let destination = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
-let fileManager = FileManager.default
-try? fileManager.removeItem(at: destination)
-try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+let logoURL = URL(fileURLWithPath: arguments[1])
+let iconURL = URL(fileURLWithPath: arguments[2])
 
-let variants: [(pixels: Int, name: String)] = [
-    (16, "icon_16x16.png"),
-    (32, "icon_16x16@2x.png"),
-    (32, "icon_32x32.png"),
-    (64, "icon_32x32@2x.png"),
-    (128, "icon_128x128.png"),
-    (256, "icon_128x128@2x.png"),
-    (256, "icon_256x256.png"),
-    (512, "icon_256x256@2x.png"),
-    (512, "icon_512x512.png"),
-    (1_024, "icon_512x512@2x.png"),
-]
-
-func point(_ x: CGFloat, _ y: CGFloat, scale: CGFloat) -> NSPoint {
-    NSPoint(x: x * scale, y: y * scale)
+guard let source = CGImageSourceCreateWithURL(logoURL as CFURL, nil),
+      let logo = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+    fputs("error: не удалось прочитать \(logoURL.path)\n", stderr)
+    exit(66)
 }
 
-func renderIcon(pixels: Int, to url: URL) throws {
-    guard let bitmap = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: pixels,
-        pixelsHigh: pixels,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
-        throw CocoaError(.fileWriteUnknown)
+// Сетка иконок macOS: холст 1024, сама плитка — 824 по центру, остальное поля.
+// Без них иконка выглядит крупнее соседних в доке.
+let plateInset: CGFloat = 100
+/// Доля плитки, которую занимает знак. Подобрано на глаз по листу
+/// предпросмотра: меньше — знак теряется, больше — упирается в углы.
+let glyphScale: CGFloat = 0.62
+
+let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+
+/// Скруглённый квадрат Apple — суперэллипс, а не прямоугольник с дугами:
+/// у дуг заметно другой изгиб на большом размере.
+func squirclePath(in rect: CGRect, exponent: Double = 5) -> CGPath {
+    let path = CGMutablePath()
+    let a = Double(rect.width / 2), b = Double(rect.height / 2)
+    let cx = Double(rect.midX), cy = Double(rect.midY)
+    let steps = 720
+    for step in 0...steps {
+        let t = Double(step) / Double(steps) * 2 * Double.pi
+        let cosT = cos(t), sinT = sin(t)
+        let x = cx + copysign(pow(abs(cosT), 2 / exponent), cosT) * a
+        let y = cy + copysign(pow(abs(sinT), 2 / exponent), sinT) * b
+        if step == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
     }
-
-    let scale = CGFloat(pixels) / 1_024
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = context
-    context.shouldAntialias = true
-
-    NSColor.clear.setFill()
-    NSRect(x: 0, y: 0, width: pixels, height: pixels).fill()
-
-    let tileRect = NSRect(x: 72 * scale, y: 72 * scale, width: 880 * scale, height: 880 * scale)
-    let tile = NSBezierPath(roundedRect: tileRect, xRadius: 220 * scale, yRadius: 220 * scale)
-    let gradient = NSGradient(colors: [
-        NSColor(calibratedRed: 0.13, green: 0.16, blue: 0.24, alpha: 1),
-        NSColor(calibratedRed: 0.39, green: 0.26, blue: 0.72, alpha: 1),
-        NSColor(calibratedRed: 0.93, green: 0.42, blue: 0.32, alpha: 1),
-    ])!
-    gradient.draw(in: tile, angle: -42)
-
-    let notch = NSBezierPath(roundedRect: NSRect(
-        x: 367 * scale,
-        y: 820 * scale,
-        width: 290 * scale,
-        height: 116 * scale
-    ), xRadius: 58 * scale, yRadius: 58 * scale)
-    NSColor(calibratedWhite: 0.07, alpha: 0.88).setFill()
-    notch.fill()
-
-    let shield = NSBezierPath()
-    shield.move(to: point(512, 730, scale: scale))
-    shield.curve(to: point(740, 638, scale: scale),
-                 controlPoint1: point(585, 707, scale: scale),
-                 controlPoint2: point(668, 682, scale: scale))
-    shield.line(to: point(724, 440, scale: scale))
-    shield.curve(to: point(512, 256, scale: scale),
-                 controlPoint1: point(712, 352, scale: scale),
-                 controlPoint2: point(630, 286, scale: scale))
-    shield.curve(to: point(300, 440, scale: scale),
-                 controlPoint1: point(394, 286, scale: scale),
-                 controlPoint2: point(312, 352, scale: scale))
-    shield.line(to: point(284, 638, scale: scale))
-    shield.curve(to: point(512, 730, scale: scale),
-                 controlPoint1: point(356, 682, scale: scale),
-                 controlPoint2: point(439, 707, scale: scale))
-    shield.close()
-    NSColor.white.withAlphaComponent(0.94).setFill()
-    shield.fill()
-
-    let keyhole = NSBezierPath(ovalIn: NSRect(x: 470 * scale, y: 480 * scale, width: 84 * scale, height: 84 * scale))
-    NSColor(calibratedRed: 0.34, green: 0.25, blue: 0.64, alpha: 1).setFill()
-    keyhole.fill()
-    let stem = NSBezierPath(roundedRect: NSRect(x: 487 * scale, y: 410 * scale, width: 50 * scale, height: 98 * scale), xRadius: 25 * scale, yRadius: 25 * scale)
-    stem.fill()
-
-    NSGraphicsContext.restoreGraphicsState()
-
-    guard let data = bitmap.representation(using: .png, properties: [:]) else {
-        throw CocoaError(.fileWriteUnknown)
-    }
-    try data.write(to: url, options: .atomic)
+    path.closeSubpath()
+    return path
 }
 
-for variant in variants {
-    try renderIcon(pixels: variant.pixels, to: destination.appendingPathComponent(variant.name))
+func renderIcon(side: Int) -> CGImage {
+    let size = CGFloat(side)
+    let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.interpolationQuality = .high
+
+    let scale = size / 1_024
+    let plate = CGRect(x: plateInset * scale, y: plateInset * scale,
+                       width: (1_024 - plateInset * 2) * scale,
+                       height: (1_024 - plateInset * 2) * scale)
+    let shape = squirclePath(in: plate)
+
+    // Подложка почти белая с еле заметным переходом: знак тёмный, и на тёмном
+    // доке без подложки он бы просто исчез.
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.clip()
+    let gradient = CGGradient(colorsSpace: sRGB, colors: [
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
+        CGColor(srgbRed: 0.925, green: 0.925, blue: 0.945, alpha: 1),
+    ] as CFArray, locations: [0, 1])!
+    ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: plate.maxY),
+                           end: CGPoint(x: 0, y: plate.minY), options: [])
+    ctx.restoreGState()
+
+    // Волосяная кромка, иначе на белом фоне Finder иконка растворяется.
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.setStrokeColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.10))
+    ctx.setLineWidth(max(1, size / 512))
+    ctx.strokePath()
+    ctx.restoreGState()
+
+    let glyphSide = plate.width * glyphScale
+    let ratio = CGFloat(logo.width) / CGFloat(logo.height)
+    let glyphSize = ratio >= 1
+        ? CGSize(width: glyphSide, height: glyphSide / ratio)
+        : CGSize(width: glyphSide * ratio, height: glyphSide)
+    ctx.draw(logo, in: CGRect(x: plate.midX - glyphSize.width / 2,
+                              y: plate.midY - glyphSize.height / 2,
+                              width: glyphSize.width, height: glyphSize.height))
+    return ctx.makeImage()!
 }
 
-let manifest = #"""
-{
-  "images" : [
-    { "filename" : "icon_16x16.png",      "idiom" : "mac", "scale" : "1x", "size" : "16x16" },
-    { "filename" : "icon_16x16@2x.png",   "idiom" : "mac", "scale" : "2x", "size" : "16x16" },
-    { "filename" : "icon_32x32.png",      "idiom" : "mac", "scale" : "1x", "size" : "32x32" },
-    { "filename" : "icon_32x32@2x.png",   "idiom" : "mac", "scale" : "2x", "size" : "32x32" },
-    { "filename" : "icon_128x128.png",    "idiom" : "mac", "scale" : "1x", "size" : "128x128" },
-    { "filename" : "icon_128x128@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "128x128" },
-    { "filename" : "icon_256x256.png",    "idiom" : "mac", "scale" : "1x", "size" : "256x256" },
-    { "filename" : "icon_256x256@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "256x256" },
-    { "filename" : "icon_512x512.png",    "idiom" : "mac", "scale" : "1x", "size" : "512x512" },
-    { "filename" : "icon_512x512@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "512x512" }
-  ],
-  "info" : { "author" : "Curty", "version" : 1 }
+let variants = [16, 32, 32, 64, 128, 256, 256, 512, 512, 1_024]
+guard let destination = CGImageDestinationCreateWithURL(
+    iconURL as CFURL, UTType.icns.identifier as CFString, variants.count, nil
+) else {
+    fputs("error: не удалось создать \(iconURL.path)\n", stderr)
+    exit(73)
 }
-"""#
-try Data(manifest.utf8).write(to: destination.appendingPathComponent("Contents.json"), options: .atomic)
+for side in variants { CGImageDestinationAddImage(destination, renderIcon(side: side), nil) }
+guard CGImageDestinationFinalize(destination) else {
+    fputs("error: не удалось записать \(iconURL.path)\n", stderr)
+    exit(73)
+}
+print("готово: \(iconURL.path)")
+
+// --- Лист предпросмотра ------------------------------------------------------
+
+guard arguments.count >= 4 else { exit(0) }
+
+let sheetWidth = 760, sheetHeight = 420
+let sheet = CGContext(data: nil, width: sheetWidth, height: sheetHeight, bitsPerComponent: 8,
+                      bytesPerRow: 0, space: sRGB,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+sheet.interpolationQuality = .high
+sheet.setFillColor(CGColor(srgbRed: 0.12, green: 0.12, blue: 0.13, alpha: 1))
+sheet.fill(CGRect(x: 0, y: 0, width: sheetWidth, height: sheetHeight))
+
+// Слева — светлая половина: так видно, как иконка держится на белом.
+sheet.setFillColor(CGColor(srgbRed: 0.96, green: 0.96, blue: 0.97, alpha: 1))
+sheet.fill(CGRect(x: 0, y: 0, width: sheetWidth / 2, height: sheetHeight))
+
+var x = 24
+for side in [128, 64, 32, 16] {
+    let image = renderIcon(side: side)
+    sheet.draw(image, in: CGRect(x: x, y: 250, width: side, height: side))
+    sheet.draw(image, in: CGRect(x: x + sheetWidth / 2, y: 250, width: side, height: side))
+    x += side + 20
+}
+
+// Плитка шторки: 36×36 в рамке рельса, в трёхкратном увеличении.
+let railScale = 3
+let tile = renderIcon(side: 36 * railScale)
+sheet.setFillColor(CGColor(srgbRed: 0.095, green: 0.095, blue: 0.11, alpha: 1))
+sheet.fill(CGRect(x: 24, y: 30, width: 58 * railScale, height: 60 * railScale))
+sheet.draw(tile, in: CGRect(x: 24 + 11 * railScale, y: 30 + 12 * railScale,
+                            width: 36 * railScale, height: 36 * railScale))
+if let preview = sheet.makeImage(),
+   let out = CGImageDestinationCreateWithURL(URL(fileURLWithPath: arguments[3]) as CFURL,
+                                             UTType.png.identifier as CFString, 1, nil) {
+    CGImageDestinationAddImage(out, preview, nil)
+    CGImageDestinationFinalize(out)
+    print("предпросмотр: \(arguments[3])")
+}

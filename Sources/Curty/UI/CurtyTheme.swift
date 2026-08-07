@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum CurtyTheme {
@@ -31,6 +32,13 @@ enum CurtyTheme {
     static let darkSurface = Color(red: 0.12, green: 0.12, blue: 0.14)
     static let darkRail = Color(red: 0.095, green: 0.095, blue: 0.11)
     static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
+
+    /// Знак приложения — тот же файл, из которого собрана иконка в доке.
+    /// Читается один раз: панель перерисовывается часто.
+    static let logo: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "Logo", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
 }
 
 /// Системные кнопки и переключатели macOS рисуются графитом, пока окно не
