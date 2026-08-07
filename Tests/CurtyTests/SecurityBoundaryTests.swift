@@ -103,6 +103,41 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertNil(store.pendingDeletion)
     }
 
+    func testUpdateIsOfferedOnlyForNewerRemoteCommits() {
+        let older = Date(timeIntervalSince1970: 1_000)
+        let newer = Date(timeIntervalSince1970: 2_000)
+
+        XCTAssertTrue(UpdatePolicy.isUpdateAvailable(
+            localCommit: "aaa", localDate: older, remoteCommit: "bbb", remoteDate: newer
+        ))
+        // Тот же коммит — обновлять нечего, даже если дата другая.
+        XCTAssertFalse(UpdatePolicy.isUpdateAvailable(
+            localCommit: "aaa", localDate: older, remoteCommit: "aaa", remoteDate: newer
+        ))
+        // Локальная сборка впереди ветки: так живёт машина автора, и кнопка
+        // не должна на неё ругаться.
+        XCTAssertFalse(UpdatePolicy.isUpdateAvailable(
+            localCommit: "aaa", localDate: newer, remoteCommit: "bbb", remoteDate: older
+        ))
+        // Сборка вне git: сравнивать не с чем, предлагать нечего.
+        XCTAssertFalse(UpdatePolicy.isUpdateAvailable(
+            localCommit: nil, localDate: nil, remoteCommit: "bbb", remoteDate: newer
+        ))
+    }
+
+    func testUpdateChecksExactlyOneAddress() {
+        XCTAssertEqual(
+            UpdatePolicy.latestCommitURL.absoluteString,
+            "https://api.github.com/repos/AYSGODX/Curty/commits/main"
+        )
+    }
+
+    func testUpdateScriptQuotesRepositoryPath() {
+        let script = UpdatePolicy.updateScript(repositoryPath: "/Users/ay/Мои проекты/O'Brien/curty")
+        XCTAssertTrue(script.contains("REPO='/Users/ay/Мои проекты/O'\\''Brien/curty'"))
+        XCTAssertTrue(script.contains("git pull --ff-only"))
+    }
+
     func testAtomicJSONStoreRoundTrip() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CurtyTests-\(UUID().uuidString)", isDirectory: true)

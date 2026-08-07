@@ -6,9 +6,10 @@
     <true/>
     <key>com.apple.security.files.user-selected.read-only</key>
     <true/>
-    <!-- Outbound only, used for exactly one thing: fetching the album cover
-         from the link Spotify itself reports. Confined to ArtworkLoader.swift
-         by Scripts/security-check.sh. -->
+    <!-- Outbound only, used for exactly two things: fetching the album cover
+         from the link Spotify itself reports, and asking api.github.com which
+         commit is on main. Confined to ArtworkLoader.swift and
+         UpdateChecker.swift by Scripts/security-check.sh. -->
     <key>com.apple.security.network.client</key>
     <true/>
     <key>com.apple.security.files.bookmarks.app-scope</key>

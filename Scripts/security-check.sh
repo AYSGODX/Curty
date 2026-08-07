@@ -30,11 +30,18 @@ done
 # out as a link rather than as image data. The entitlement is therefore expected,
 # but the code using it must stay in one file so it cannot quietly spread.
 ARTWORK_FILE="$ROOT/Sources/Curty/Features/Media/ArtworkLoader.swift"
+# Второй и последний выход наружу: запрос к GitHub о том, есть ли коммит новее
+# собранного. Отправляет ноль данных о пользователе и ходит по одному адресу.
+UPDATE_FILE="$ROOT/Sources/Curty/Features/Updates/UpdateChecker.swift"
 
-# Однозначно сетевые API: им место только в загрузчике обложек.
+# Однозначно сетевые API: им место только в этих двух файлах. Новый адресат
+# сети придётся вписать сюда руками, то есть осознанно.
+NETWORK_ALLOWED="$ARTWORK_FILE
+$UPDATE_FILE"
 NETWORK_USERS="$(grep -rlE 'URLSession|NSURLConnection|CFReadStream' "$ROOT/Sources" 2>/dev/null || true)"
-if [ "$NETWORK_USERS" != "$ARTWORK_FILE" ]; then
-    echo "Сетевой код должен жить только в ArtworkLoader.swift, найден в: ${NETWORK_USERS:-нигде}" >&2
+UNEXPECTED_NETWORK="$(comm -23 <(echo "$NETWORK_USERS" | sort) <(echo "$NETWORK_ALLOWED" | sort) | grep -v '^$' || true)"
+if [ -n "$UNEXPECTED_NETWORK" ]; then
+    echo "Сетевой код вне списка разрешённых файлов: $UNEXPECTED_NETWORK" >&2
     FAILURES=1
 fi
 
@@ -53,6 +60,13 @@ fi
 
 if ! scan 'approvedHosts' "$ARTWORK_FILE"; then
     echo "The artwork loader must keep its host allowlist." >&2
+    FAILURES=1
+fi
+
+# Адрес проверки обновлений должен оставаться константой: иначе запрос уедет
+# туда, куда его попросит любой ответ сервера.
+if ! scan 'apiHost = "api.github.com"' "$UPDATE_FILE"; then
+    echo "Проверка обновлений должна ходить только на api.github.com." >&2
     FAILURES=1
 fi
 

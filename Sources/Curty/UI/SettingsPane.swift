@@ -6,11 +6,13 @@ import SwiftUI
 struct SettingsPane: View {
     @ObservedObject private var model: AppModel
     @ObservedObject private var preferences: Preferences
+    @ObservedObject private var updates: UpdateChecker
     @State private var isConfirmingDeletion = false
 
     init(model: AppModel) {
         self.model = model
         _preferences = ObservedObject(wrappedValue: model.preferences)
+        _updates = ObservedObject(wrappedValue: model.updates)
     }
 
     var body: some View {
@@ -69,6 +71,10 @@ struct SettingsPane: View {
                     }
                 }
 
+                section("Обновление") {
+                    updateSection
+                }
+
                 section("Панель") {
                     SettingsToggleRow(
                         title: "Не мешать в полноэкранном режиме",
@@ -114,6 +120,77 @@ struct SettingsPane: View {
             Text("История буфера, ссылки с полки, сниппеты и заметки будут стёрты. Это нельзя отменить.")
         }
     }
+
+    @ViewBuilder
+    private var updateSection: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Установленная версия")
+                    .font(.system(size: 12, weight: .medium))
+                Text(buildDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(updateStatus.label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(updateStatus.style.color)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(updateStatus.style.color.opacity(0.12), in: Capsule())
+        }
+
+        if case .failed(let message) = updates.state {
+            CurtyErrorRow(message: message)
+        }
+
+        HStack(spacing: 8) {
+            // Кнопка не гаснет совсем, а тускнеет: исчезающий элемент читается
+            // как поломка, а выключенный — как «пока нечего ставить».
+            Button("Обновить") { updates.startUpdate() }
+                .buttonStyle(CurtyProminentButtonStyle())
+                .disabled(!updates.canInstallUpdate)
+
+            Button(updates.state == .checking ? "Проверяю…" : "Проверить") { updates.check() }
+                .buttonStyle(CurtySecondaryButtonStyle())
+                .disabled(updates.state == .checking)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        Text("Обновление откроет Терминал: он заберёт свежую версию с GitHub, пересоберёт её и перезапустит Curty. Заметки, сниппеты, полка и настройки останутся на месте.")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var buildDescription: String {
+        guard let commit = updates.shortCommit else {
+            return "Собрана вне git-репозитория — проверка недоступна."
+        }
+        guard let date = updates.buildDate else { return "Сборка \(commit)" }
+        return "Сборка \(commit) от \(Self.dateFormatter.string(from: date))"
+    }
+
+    private var updateStatus: (label: String, style: SettingsToggleBadgeStyle) {
+        switch updates.state {
+        case .unknown: ("Не проверялось", .unavailable)
+        case .checking: ("Проверяю…", .inactive)
+        case .upToDate: ("Последняя", .active)
+        case .available(_, let date): ("Есть от \(Self.dateFormatter.string(from: date))", .warning)
+        case .failed: ("Ошибка", .warning)
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.setLocalizedDateFormatFromTemplate("d MMMM")
+        return formatter
+    }()
 
     @ViewBuilder
     private func section<Content: View>(

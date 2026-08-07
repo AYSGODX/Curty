@@ -96,6 +96,7 @@ final class AppModel: ObservableObject {
     let notes: NoteStore
     let calendar: CalendarStore
     let media: MediaStore
+    let updates: UpdateChecker
     let translate = TranslateStore()
 
     private var cancellables = Set<AnyCancellable>()
@@ -109,6 +110,7 @@ final class AppModel: ObservableObject {
         notes = NoteStore()
         calendar = CalendarStore()
         media = MediaStore()
+        updates = UpdateChecker()
 
         preferences.$clipboardMonitoringEnabled
             .removeDuplicates()
@@ -161,6 +163,7 @@ final class AppModel: ObservableObject {
     func select(_ tool: Tool) {
         selectedTool = tool
         if tool == .calendar { calendar.refreshAuthorization() }
+        if tool == .settings { updates.checkIfStale() }
     }
 
     func moveTool(_ tool: Tool, toIndex index: Int) {
