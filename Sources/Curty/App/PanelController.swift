@@ -131,7 +131,22 @@ final class FloatingPanel: NSPanel {
             panel.dataSource = nil
             panel.delegate = nil
             QuickLookCoordinator.shared.previewPanelDidClose()
+            // Быстрый просмотр активирует Curty целиком, а панель за это время
+            // могла спрятаться: тогда вернуть фокус прежнему приложению больше
+            // некому, кроме как отсюда.
+            if alphaValue == 0 { relinquishFocus() }
         }
+    }
+
+    /// Клик по панели делает её ключевым окном, а быстрый просмотр вдобавок
+    /// активирует приложение. Спрятать панель одной прозрачностью мало:
+    /// невидимое окно остаётся ключевым и продолжает забирать нажатия —
+    /// пользователь печатает в своём редакторе и слышит системные звуки ошибок.
+    /// Ключ и активность возвращаются предыдущему приложению только когда окно
+    /// уходит с экрана, а Curty перестаёт быть активной.
+    func relinquishFocus() {
+        orderOut(nil)
+        if NSApp.isActive { NSApp.deactivate() }
     }
 }
 
@@ -263,7 +278,18 @@ final class PanelController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = PanelInteractionPolicy.closeAnimationDuration
             panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            Task { @MainActor in self?.relinquishFocusIfHidden() }
         }
+    }
+
+    private func relinquishFocusIfHidden() {
+        guard !model.isPanelOpen else { return }
+        // Быстрый просмотр держится за панель как за источник данных: убрать её
+        // с экрана, пока он открыт, значит закрыть и его. Фокус вернёт сам
+        // просмотр, когда закончится.
+        guard !QuickLookCoordinator.shared.isVisible else { return }
+        panel.relinquishFocus()
     }
 
     private func startCursorMonitoring() {
