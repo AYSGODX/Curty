@@ -214,6 +214,10 @@ final class SecurityBoundaryTests: XCTestCase {
         )
         XCTAssertTrue(notch.contains(NSPoint(x: 720, y: 880)))
         XCTAssertGreaterThan(notch.width, 200)
+        // Нижняя граница зоны совпадает с нижней кромкой выреза: на пункт выше
+        // — ещё вырез, на пункт ниже — уже обычный экран.
+        XCTAssertTrue(notch.contains(NSPoint(x: 720, y: frame.maxY - 38 + 1)))
+        XCTAssertFalse(notch.contains(NSPoint(x: 720, y: frame.maxY - 38 - 1)))
 
         // The cursor reaches exactly frame.maxY when shoved into the top edge.
         XCTAssertTrue(fallback.contains(NSPoint(x: frame.midX, y: frame.maxY)))

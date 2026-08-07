@@ -33,7 +33,12 @@ enum PanelInteractionPolicy {
         if let leftAuxiliaryArea, let rightAuxiliaryArea {
             let notchWidth = rightAuxiliaryArea.minX - leftAuxiliaryArea.maxX
             if notchWidth >= 24 {
-                let height = max(34, min(54, safeAreaTop + 14))
+                // Ровно по нижней кромке выреза. Прежние +14 пунктов делали
+                // зону заметно ниже него, и панель раскрывалась там, где
+                // никакого выреза уже нет. Максимум — защита от нулевого
+                // отступа: с ним зона схлопнулась бы, и открыть панель
+                // наведением стало бы нечем.
+                let height = max(safeAreaTop, 24)
                 return NSRect(
                     x: leftAuxiliaryArea.maxX - 30,
                     y: screenFrame.maxY - height,
