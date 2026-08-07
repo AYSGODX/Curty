@@ -218,6 +218,24 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
+    func testMediaVolumeStaysInRangeAndFormatsWithoutSeparators() {
+        XCTAssertEqual(MediaVolumePolicy.clamp(-40), 0)
+        XCTAssertEqual(MediaVolumePolicy.clamp(180), 100)
+        XCTAssertEqual(MediaVolumePolicy.clamp(37), 37)
+
+        // Плеер, не сообщивший громкость, отдаёт -1: ползунка тогда быть не должно.
+        XCTAssertNil(MediaVolumePolicy.reported(-1))
+        XCTAssertEqual(MediaVolumePolicy.reported(0), 0)
+        XCTAssertEqual(MediaVolumePolicy.reported(101), 100)
+
+        // Целое без разделителя: на дроби с запятой в чужой локали уже
+        // обжигались с позицией трека.
+        XCTAssertEqual(MediaVolumePolicy.format(37.6), "38")
+        XCTAssertEqual(MediaVolumePolicy.format(1_000), "100")
+        XCTAssertFalse(MediaVolumePolicy.format(37.5).contains(","))
+        XCTAssertFalse(MediaVolumePolicy.format(37.5).contains("."))
+    }
+
     func testMediaCommandsStayAFixedAllowlist() {
         XCTAssertNil(MediaCommand(rawValue: "run arbitrary script"))
         XCTAssertEqual(Set(MediaCommand.allCases.map(\.rawValue)), ["togglePlayPause", "next", "previous"])

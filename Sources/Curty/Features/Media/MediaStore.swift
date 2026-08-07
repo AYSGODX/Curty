@@ -17,6 +17,28 @@ enum MediaSeekPolicy {
     }
 }
 
+/// Оба плеера принимают целое 0…100. Отдельная политика, потому что значение
+/// приходит и снаружи — от чужого приложения, и изнутри — от пальца на ползунке.
+enum MediaVolumePolicy {
+    static let range: ClosedRange<Double> = 0...100
+
+    static func clamp(_ value: Double) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+
+    /// Плеер, который не сообщил громкость, отдаёт -1: ползунок в этом случае
+    /// не показывается вовсе, вместо того чтобы показывать выдуманный ноль.
+    static func reported(_ value: Double) -> Double? {
+        value < 0 ? nil : clamp(value)
+    }
+
+    /// Целое без разделителя: дробь с запятой AppleScript в чужой локали
+    /// прочитает не так, на этом уже обжигались с позицией трека.
+    static func format(_ value: Double) -> String {
+        String(Int(clamp(value).rounded()))
+    }
+}
+
 private enum PlayerKind: CaseIterable {
     case spotify
     case music
@@ -53,6 +75,10 @@ private enum PlayerKind: CaseIterable {
             set trackAlbum to ""
             set trackDuration to "0"
             set trackArtwork to ""
+            set playerVolume to "-1"
+            try
+                set playerVolume to (sound volume as text)
+            end try
             try
                 set trackName to name of currentItem as text
             end try
@@ -68,7 +94,17 @@ private enum PlayerKind: CaseIterable {
             try
                 set trackArtwork to \(artworkExpression)
             end try
-            return (player state as text) & separatorCharacter & trackName & separatorCharacter & trackArtist & separatorCharacter & trackAlbum & separatorCharacter & trackDuration & separatorCharacter & (player position as text) & separatorCharacter & trackArtwork
+            return (player state as text) & separatorCharacter & trackName & separatorCharacter & trackArtist & separatorCharacter & trackAlbum & separatorCharacter & trackDuration & separatorCharacter & (player position as text) & separatorCharacter & trackArtwork & separatorCharacter & playerVolume
+        end tell
+        """
+    }
+
+    /// Громкость самого плеера, а не системная: крутить общий звук машины
+    /// ради музыки никто не просил, и это потребовало бы прав на System Events.
+    func volumeScript(_ value: Double) -> String {
+        """
+        tell application id "\(bundleID)"
+            set sound volume to \(MediaVolumePolicy.format(value))
         end tell
         """
     }
@@ -121,6 +157,10 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
 
     func seek(to seconds: Double, on source: String) throws {
         _ = try execute(try target(source).seekScript(toSeconds: seconds))
+    }
+
+    func setVolume(_ value: Double, on source: String) throws {
+        _ = try execute(try target(source).volumeScript(value))
     }
 
     private func target(_ source: String) throws -> PlayerKind {
@@ -178,7 +218,7 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
         guard !raw.isEmpty else { return nil }
         let separator = Unicode.Scalar(30).map(String.init) ?? "\u{1E}"
         let parts = raw.components(separatedBy: separator)
-        guard parts.count == 7, !parts[1].isEmpty else { return nil }
+        guard parts.count == 8, !parts[1].isEmpty else { return nil }
         return MediaSnapshot(
             source: player.displayName,
             title: parts[1],
@@ -187,7 +227,8 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
             isPlaying: parts[0].lowercased() == "playing",
             duration: Self.number(parts[4]) / player.durationDivisor,
             position: Self.number(parts[5]),
-            artworkURL: parts[6]
+            artworkURL: parts[6],
+            volume: MediaVolumePolicy.reported(Self.number(parts[7]))
         )
     }
 
@@ -380,6 +421,29 @@ final class MediaStore: ObservableObject {
                 case .success:
                     self.lastError = nil
                     self.refresh()
+                case .failure(let error):
+                    self.lastError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func setVolume(_ value: Double) {
+        guard isEnabled, let current = snapshot, current.volume != nil, beginRequest() else { return }
+        let target = MediaVolumePolicy.clamp(value)
+        // Ползунок встаёт сразу; следующий опрос через секунду это подтвердит.
+        snapshot?.volume = target
+        let adapter = self.adapter
+        let source = current.source
+        let requestGeneration = generation
+        queue.async { [weak self] in
+            let result = Result { try adapter.setVolume(target, on: source) }
+            Task { @MainActor in
+                guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                self.isRefreshing = false
+                switch result {
+                case .success:
+                    self.lastError = nil
                 case .failure(let error):
                     self.lastError = error.localizedDescription
                 }

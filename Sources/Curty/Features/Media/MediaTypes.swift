@@ -11,6 +11,9 @@ struct MediaSnapshot: Codable, Equatable, Sendable {
     /// Empty unless the player publishes a cover link; the image itself is never
     /// carried here.
     var artworkURL: String
+    /// Громкость самого плеера, 0…100. nil — плеер её не сообщил, и тогда
+    /// ползунок не показывается: лучше без него, чем врущий.
+    var volume: Double?
 
     init(
         source: String,
@@ -20,7 +23,8 @@ struct MediaSnapshot: Codable, Equatable, Sendable {
         isPlaying: Bool,
         duration: Double,
         position: Double,
-        artworkURL: String = ""
+        artworkURL: String = "",
+        volume: Double? = nil
     ) {
         self.source = source
         self.title = title
@@ -30,6 +34,7 @@ struct MediaSnapshot: Codable, Equatable, Sendable {
         self.duration = duration
         self.position = position
         self.artworkURL = artworkURL
+        self.volume = volume
     }
 }
 

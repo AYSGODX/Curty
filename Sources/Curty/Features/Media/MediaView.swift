@@ -70,6 +70,12 @@ struct MediaView: View {
                         )
                     }
                 }
+
+                // Громкость самого плеера. Ползунок появляется, только если
+                // плеер её сообщил: выдуманный ноль хуже, чем ничего.
+                if let volume = store.snapshot?.volume {
+                    MediaVolumeSlider(volume: volume) { store.setVolume($0) }
+                }
                 }
             }
 
@@ -138,6 +144,69 @@ struct MediaView: View {
 /// Position within the track, draggable to seek. While a drag is in flight the
 /// local fraction wins, otherwise the once-a-second poll would yank the handle
 /// back under the user's finger.
+private struct MediaVolumeSlider: View {
+    let volume: Double
+    let onChange: (Double) -> Void
+
+    @State private var dragValue: Double?
+
+    private var current: Double { dragValue ?? volume }
+    private var fraction: Double { min(max(current / 100, 0), 1) }
+
+    private var symbol: String {
+        switch current {
+        case ..<1: return "speaker.slash"
+        case ..<34: return "speaker.wave.1"
+        case ..<67: return "speaker.wave.2"
+        default: return "speaker.wave.3"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                // Ширина фиксирована: значок меняется вместе с громкостью, и
+                // без этого ползунок дёргался бы при каждом переключении.
+                .frame(width: 16, alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.primary.opacity(0.12))
+                    Capsule()
+                        .fill(CurtyTheme.accent)
+                        .frame(width: proxy.size.width * fraction)
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            dragValue = Self.value(at: value.location.x, width: proxy.size.width)
+                        }
+                        .onEnded { value in
+                            let target = Self.value(at: value.location.x, width: proxy.size.width)
+                            dragValue = nil
+                            onChange(target)
+                        }
+                )
+            }
+            .frame(height: 5)
+
+            Text("\(Int(current.rounded()))")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 24, alignment: .trailing)
+        }
+        .help("Громкость плеера")
+    }
+
+    private static func value(at x: CGFloat, width: CGFloat) -> Double {
+        guard width > 0 else { return 0 }
+        return MediaVolumePolicy.clamp(Double(x / width) * 100)
+    }
+}
+
 private struct MediaScrubber: View {
     let position: Double
     let duration: Double
