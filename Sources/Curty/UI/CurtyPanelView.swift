@@ -177,13 +177,14 @@ struct PanelRootView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(CurtyTheme.accent)
                 if let logo = CurtyTheme.logo {
-                    // Двадцать пунктов, а не во всю плитку: «C» — сплошная
-                    // фигура, и в полный рост она выглядела ярче тонких значков
-                    // инструментов под ней. Размер подобран по сравнению с ними.
+                    // Не во всю плитку: «C» — сплошная фигура, и в полный рост
+                    // она выглядит ярче тонких значков инструментов под ней. Но
+                    // и уменьшать сильно нельзя — вырез перестаёт читаться как
+                    // вырез и превращается в точку. Двадцать восемь — середина.
                     Image(nsImage: logo)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 20, height: 20)
+                        .frame(width: 28, height: 28)
                 } else {
                     Image(systemName: "shield.lefthalf.filled")
                         .font(.system(size: 17, weight: .semibold))
