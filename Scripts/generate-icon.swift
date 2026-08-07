@@ -150,6 +150,21 @@ let smallSize = smallRatio >= 1
 smallContext.draw(logo, in: CGRect(x: (CGFloat(smallSide) - smallSize.width) / 2,
                                    y: (CGFloat(smallSide) - smallSize.height) / 2,
                                    width: smallSize.width, height: smallSize.height))
+
+// Для шторки фон вырезается: там плитку рисует само приложение, а знак нужен
+// отдельно, чтобы задавать ему размер. «C» — фигура крупная и сплошная, рядом
+// с тонкими значками инструментов она читается ярче, и уравнивает их именно
+// размер, а не цвет. Края, размытые сглаживанием, остаются подкрашенными в
+// фон — на плитке того же цвета этого не видно.
+if isFullBleed, let data = smallContext.data {
+    let pixels = data.bindMemory(to: UInt8.self, capacity: smallSide * smallSide * 4)
+    let background = (pixels[0], pixels[1], pixels[2])
+    for index in stride(from: 0, to: smallSide * smallSide * 4, by: 4)
+    where (pixels[index], pixels[index + 1], pixels[index + 2]) == background {
+        pixels[index] = 0; pixels[index + 1] = 0; pixels[index + 2] = 0; pixels[index + 3] = 0
+    }
+}
+
 if let smallImage = smallContext.makeImage(),
    let smallOut = CGImageDestinationCreateWithURL(smallURL as CFURL,
                                                   UTType.png.identifier as CFString, 1, nil) {

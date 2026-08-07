@@ -170,24 +170,24 @@ struct PanelRootView: View {
 
     private var toolRail: some View {
         VStack(spacing: CurtyTheme.railButtonSpacing) {
-            // Знак уже нарисован вместе с фоном, поэтому подложка не нужна —
-            // достаточно обрезать его по форме плитки. Запасной вариант на
-            // случай, если файла в бандле не окажется: прежний символ на
-            // акцентной плитке, лишь бы место не пустовало.
-            Group {
+            // Плитку рисует приложение, а в бандле лежит только знак без фона:
+            // так его размер можно подогнать под соседние значки. Запасной
+            // вариант на случай пропавшего файла — прежний символ.
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(CurtyTheme.accent)
                 if let logo = CurtyTheme.logo {
+                    // Двадцать пунктов, а не во всю плитку: «C» — сплошная
+                    // фигура, и в полный рост она выглядела ярче тонких значков
+                    // инструментов под ней. Размер подобран по сравнению с ними.
                     Image(nsImage: logo)
                         .resizable()
-                        .scaledToFill()
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
                 } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(CurtyTheme.accent.gradient)
-                        Image(systemName: "shield.lefthalf.filled")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
             }
             .frame(width: 36, height: 36)
