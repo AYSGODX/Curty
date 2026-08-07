@@ -35,7 +35,6 @@ struct PanelRootView: View {
             RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
                 .strokeBorder(.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
         )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.18), radius: 28, y: 14)
         // Escape доходит только когда панель уже стала ключевой, то есть после
         // клика по ней. Остальные случаи закрывает щелчок мимо панели.
         .onExitCommand { model.requestPanelClose() }

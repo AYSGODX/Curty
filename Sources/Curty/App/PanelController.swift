@@ -171,6 +171,9 @@ final class PanelController {
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
+        // Тень рисует окно, а не SwiftUI: модификатор .shadow ложится внутрь
+        // окна и обрезается его прямоугольной границей, оставляя по углам
+        // острые тёмные клинья поверх скруглённой панели.
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
@@ -232,6 +235,9 @@ final class PanelController {
         model.isPanelOpen = true
         panel.ignoresMouseEvents = false
         panel.alphaValue = 1
+        // Форма окна прозрачная, поэтому AppKit пересчитывает тень по альфе
+        // только по явной просьбе.
+        panel.invalidateShadow()
         panel.orderFrontRegardless()
         scheduleCursorTimer(interval: PanelInteractionPolicy.sampleInterval)
     }
