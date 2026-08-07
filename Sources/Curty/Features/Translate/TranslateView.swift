@@ -41,28 +41,18 @@ enum TranslationLanguageDetector {
 }
 
 struct TranslateView: View {
-    private enum Status: Equatable {
-        case idle
-        case translating
-        case complete
-        case failed(String)
-    }
-
     private enum Field: Hashable {
         case source
     }
 
-    @State private var direction: TranslationDirection = .russianToEnglish
-    @State private var sourceText = ""
-    @State private var translatedText = ""
-    @State private var status: Status = .idle
+    @ObservedObject var store: TranslateStore
     @State private var configuration: TranslationSession.Configuration?
     @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(spacing: 9) {
             HStack {
-                languagePill(direction.sourceTitle)
+                languagePill(store.direction.sourceTitle)
                 Spacer()
                 Button {
                     swapLanguages()
@@ -73,7 +63,7 @@ struct TranslateView: View {
                 .foregroundStyle(.secondary)
                 .help("Поменять языки")
                 Spacer()
-                languagePill(direction.targetTitle)
+                languagePill(store.direction.targetTitle)
             }
 
             CurtyCard {
@@ -93,43 +83,44 @@ struct TranslateView: View {
                 Button { copyTranslation() } label: { Image(systemName: "doc.on.doc") }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .disabled(translatedText.isEmpty)
+                    .disabled(store.translatedText.isEmpty)
                     .help("Копировать перевод")
                     .accessibilityLabel("Копировать перевод")
                 Button("Перевести") { requestTranslation() }
                     .buttonStyle(CurtyProminentButtonStyle())
-                    .disabled(sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || status == .translating)
+                    .disabled(store.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.status == .translating)
             }
         }
-        .onChange(of: sourceText) { _, newValue in
+        .onAppear { store.resumeIfInterrupted() }
+        .onChange(of: store.sourceText) { _, newValue in
             applyDetectedLanguage(for: newValue)
         }
         .translationTask(configuration) { session in
-            guard status == .translating else { return }
-            let requestedText = sourceText
-            let requestedDirection = direction
+            guard store.status == .translating else { return }
+            let requestedText = store.sourceText
+            let requestedDirection = store.direction
             do {
                 let response = try await session.translate(requestedText)
-                guard sourceText == requestedText, direction == requestedDirection else { return }
-                translatedText = response.targetText
-                status = .complete
+                guard store.sourceText == requestedText, store.direction == requestedDirection else { return }
+                store.translatedText = response.targetText
+                store.status = .complete
             } catch {
-                status = .failed(error.localizedDescription)
+                store.status = .failed(error.localizedDescription)
             }
         }
     }
 
     private var sourceEditor: some View {
-        let isFloating = focusedField == .source || !sourceText.isEmpty
+        let isFloating = focusedField == .source || !store.sourceText.isEmpty
         return ZStack(alignment: .topLeading) {
-            TextEditor(text: $sourceText)
+            TextEditor(text: $store.sourceText)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
                 .focused($focusedField, equals: .source)
                 .frame(height: isFloating ? 50 : 62)
                 .offset(y: isFloating ? 12 : 0)
 
-            if sourceText.isEmpty {
+            if store.sourceText.isEmpty {
                 Text("Введите или вставьте текст")
                     .font(.system(size: isFloating ? 10 : 13, weight: isFloating ? .medium : .regular))
                     .foregroundStyle(isFloating ? CurtyTheme.accent : Color.secondary.opacity(0.55))
@@ -144,13 +135,13 @@ struct TranslateView: View {
 
     private var resultEditor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: $translatedText)
+            TextEditor(text: $store.translatedText)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
                 .frame(height: 62)
                 .disabled(true)
 
-            if translatedText.isEmpty {
+            if store.translatedText.isEmpty {
                 Text("Перевод появится здесь")
                     .font(.system(size: 13))
                     .foregroundStyle(.tertiary)
@@ -162,36 +153,31 @@ struct TranslateView: View {
     }
 
     private func applyDetectedLanguage(for text: String) {
-        guard let detected = TranslationLanguageDetector.direction(for: text), detected != direction else { return }
+        var changed = false
         withAnimation(.easeOut(duration: 0.16)) {
-            direction = detected
+            changed = store.applyDetectedLanguage(for: text)
         }
-        translatedText = ""
-        configuration = nil
-        status = .idle
+        if changed { configuration = nil }
     }
 
     private func requestTranslation() {
-        applyDetectedLanguage(for: sourceText)
-        status = .translating
+        applyDetectedLanguage(for: store.sourceText)
+        store.status = .translating
         if configuration == nil {
-            configuration = TranslationSession.Configuration(source: direction.source, target: direction.target)
+            configuration = TranslationSession.Configuration(source: store.direction.source, target: store.direction.target)
         } else {
             configuration?.invalidate()
         }
     }
 
     private func copyTranslation() {
-        guard !translatedText.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(translatedText, forType: .string)
+        guard !store.translatedText.isEmpty else { return }
+        InternalPasteboard.write { $0.setString(store.translatedText, forType: .string) }
     }
 
     private func swapLanguages() {
-        direction = direction == .russianToEnglish ? .englishToRussian : .russianToEnglish
-        swap(&sourceText, &translatedText)
+        store.swapLanguages()
         configuration = nil
-        status = .idle
     }
 
     private func languagePill(_ title: String) -> some View {
@@ -203,7 +189,7 @@ struct TranslateView: View {
     }
 
     private var statusText: String {
-        switch status {
+        switch store.status {
         case .idle: "Язык определяется автоматически"
         case .translating: "Переводим…"
         case .complete: "Готово"
@@ -212,7 +198,7 @@ struct TranslateView: View {
     }
 
     private var statusSymbol: String {
-        switch status {
+        switch store.status {
         case .idle: "character.bubble"
         case .translating: "ellipsis.circle"
         case .complete: "checkmark.circle.fill"
@@ -221,7 +207,7 @@ struct TranslateView: View {
     }
 
     private var statusColor: Color {
-        switch status {
+        switch store.status {
         case .idle: .secondary
         case .translating: CurtyTheme.accent
         case .complete: CurtyTheme.success

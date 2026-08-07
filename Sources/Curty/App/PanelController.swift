@@ -14,6 +14,15 @@ enum PanelInteractionPolicy {
     /// notch" and closed the panel.
     static let topEdgeSlack: CGFloat = 4
 
+    /// На экране без выреза зона высотой со строку меню срабатывала бы
+    /// постоянно: туда курсор попадает по десять раз на дню. Нужен упор в саму
+    /// кромку — активный угол, только посередине верхнего края.
+    static let edgePushHeight: CGFloat = 2
+
+    /// Сколько панель, открытая из меню-бара, ждёт курсора, прежде чем начать
+    /// вести себя как обычно. Без этого она висела, пока курсор физически не
+    /// заглянет внутрь, и закрыть её было нечем.
+    static let cursorArrivalTimeout: TimeInterval = 6
 
     static func activationRect(
         screenFrame: NSRect,
@@ -21,11 +30,10 @@ enum PanelInteractionPolicy {
         leftAuxiliaryArea: NSRect?,
         rightAuxiliaryArea: NSRect?
     ) -> NSRect {
-        let height = max(34, min(54, safeAreaTop + 14))
-
         if let leftAuxiliaryArea, let rightAuxiliaryArea {
             let notchWidth = rightAuxiliaryArea.minX - leftAuxiliaryArea.maxX
             if notchWidth >= 24 {
+                let height = max(34, min(54, safeAreaTop + 14))
                 return NSRect(
                     x: leftAuxiliaryArea.maxX - 30,
                     y: screenFrame.maxY - height,
@@ -37,9 +45,9 @@ enum PanelInteractionPolicy {
 
         return NSRect(
             x: screenFrame.midX - 130,
-            y: screenFrame.maxY - height,
+            y: screenFrame.maxY - edgePushHeight,
             width: 260,
-            height: height + topEdgeSlack
+            height: edgePushHeight + topEdgeSlack
         )
     }
 }
@@ -65,6 +73,25 @@ enum SystemOverlayPolicy {
         let screenArea = screenSize.width * screenSize.height
         guard screenArea > 0 else { return false }
         return width * height >= screenArea * coverageThreshold
+    }
+
+    /// Полноэкранное приложение отличимо по геометрии: обычное окно во весь
+    /// экран не залезает под строку меню (1512×949 против 1512×982), а
+    /// полноэкранное занимает экран целиком.
+    static func isFullScreenWindowPresent(screenSize: CGSize) -> Bool {
+        guard screenSize.width > 0, screenSize.height > 0,
+              let windows = CGWindowListCopyWindowInfo(
+                  [.optionOnScreenOnly, .excludeDesktopElements],
+                  kCGNullWindowID
+              ) as? [[String: Any]] else { return false }
+
+        return windows.contains { window in
+            guard window[kCGWindowLayer as String] as? Int == 0,
+                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  let width = bounds["Width"] as? CGFloat,
+                  let height = bounds["Height"] as? CGFloat else { return false }
+            return width >= screenSize.width - 1 && height >= screenSize.height - 1
+        }
     }
 
     static func fullScreenDockWindowCount(screenSize: CGSize) -> Int {
@@ -123,11 +150,13 @@ final class PanelController {
     private var closeWorkItem: DispatchWorkItem?
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
+    private var clickMonitor: Any?
     private var screenObserver: NSObjectProtocol?
     private var overlayCheckedAt: TimeInterval = 0
     private var overlayWasVisible = false
     private var suppressingSince: TimeInterval?
     private var awaitsCursorArrival = false
+    private var awaitsCursorArrivalSince: TimeInterval = 0
 
     private let panelSize = NSSize(width: 488, height: 420)
 
@@ -178,6 +207,8 @@ final class PanelController {
         cursorTimer = nil
         if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
         if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
         globalMouseMonitor = nil
         localMouseMonitor = nil
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
@@ -196,6 +227,7 @@ final class PanelController {
         cancelClose()
         guard !model.isPanelOpen else { return }
         awaitsCursorArrival = holdingUntilCursorArrives
+        awaitsCursorArrivalSince = ProcessInfo.processInfo.systemUptime
         position(on: screenUnderMouse() ?? NSScreen.main)
         model.isPanelOpen = true
         panel.ignoresMouseEvents = false
@@ -239,6 +271,14 @@ final class PanelController {
             return event
         }
 
+        // Щелчок в другом приложении — самый естественный способ сказать
+        // «убери». Раньше панель на него никак не реагировала.
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor in self?.dismissIfClickedOutside() }
+        }
+
         scheduleCursorTimer(interval: PanelInteractionPolicy.idleSampleInterval)
     }
 
@@ -268,7 +308,7 @@ final class PanelController {
         )
 
         if activation.contains(point) {
-            if !model.isPanelOpen, isSystemOverlayVisible(on: screen) { return }
+            if !model.isPanelOpen, isActivationSuppressed(on: screen) { return }
             open()
             return
         }
@@ -278,7 +318,15 @@ final class PanelController {
             awaitsCursorArrival = false
             cancelClose()
         } else if awaitsCursorArrival {
-            cancelClose()
+            // Курсор мог и не прийти вовсе: держим не дольше таймаута, иначе
+            // панель остаётся на экране без всякого способа её убрать.
+            if ProcessInfo.processInfo.systemUptime - awaitsCursorArrivalSince
+                > PanelInteractionPolicy.cursorArrivalTimeout {
+                awaitsCursorArrival = false
+                scheduleClose()
+            } else {
+                cancelClose()
+            }
         } else {
             scheduleClose()
         }
@@ -287,10 +335,19 @@ final class PanelController {
     /// Only consulted while the cursor sits in the activation zone and the panel
     /// is closed, so the window scan stays rare; the cache bounds it during a
     /// suppressed hover.
-    private func isSystemOverlayVisible(on screen: NSScreen) -> Bool {
+    private func isActivationSuppressed(on screen: NSScreen) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
         if now - overlayCheckedAt < 0.2 { return overlayWasVisible }
         overlayCheckedAt = now
+
+        if model.preferences.respectFullScreenEnabled,
+           SystemOverlayPolicy.isFullScreenWindowPresent(screenSize: screen.frame.size) {
+            // Полноэкранный режим — не оверлей Dock, ему предохранитель по
+            // времени не нужен: он кончится вместе с выходом из полного экрана.
+            suppressingSince = nil
+            overlayWasVisible = true
+            return true
+        }
 
         let count = SystemOverlayPolicy.fullScreenDockWindowCount(screenSize: screen.frame.size)
         guard count >= SystemOverlayPolicy.overlayWindowCount else {
@@ -303,6 +360,12 @@ final class PanelController {
         suppressingSince = since
         overlayWasVisible = now - since < SystemOverlayPolicy.giveUpInterval
         return overlayWasVisible
+    }
+
+    private func dismissIfClickedOutside() {
+        guard model.isPanelOpen, !model.isPinned, !model.isPresentingDialog else { return }
+        guard !panel.frame.contains(NSEvent.mouseLocation) else { return }
+        dismiss()
     }
 
     private func scheduleClose() {

@@ -96,6 +96,7 @@ final class AppModel: ObservableObject {
     let notes: NoteStore
     let calendar: CalendarStore
     let media: MediaStore
+    let translate = TranslateStore()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -173,7 +174,9 @@ final class AppModel: ObservableObject {
     }
 
     func deleteAllLocalData() {
-        clipboard.stopAndClear()
+        // clear, а не stopAndClear: удаление данных не должно втихую выключать
+        // наблюдение, оставляя тумблер в положении «включено».
+        clipboard.clear()
         shelf.clearReferences()
         snippets.clear()
         notes.clear()

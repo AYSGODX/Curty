@@ -37,8 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clipboardMenuItem = clipboard
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
-        menu.addItem(withTitle: "Завершить Curty", action: #selector(quit), keyEquivalent: "q")
+        // Без keyEquivalent: у приложения без строки меню сочетания работают
+        // только при открытом меню, то есть обещают то, чего нет.
+        menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: "")
+        menu.addItem(withTitle: "Завершить Curty", action: #selector(quit), keyEquivalent: "")
 
         for menuItem in menu.items { menuItem.target = self }
         item.menu = menu

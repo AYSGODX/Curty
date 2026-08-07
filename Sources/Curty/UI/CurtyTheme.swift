@@ -116,23 +116,26 @@ struct CurtySwitch: View {
     var isEnabled = true
 
     var body: some View {
-        Capsule()
-            .fill(isOn ? CurtyTheme.accent : Color.primary.opacity(0.22))
-            .frame(width: 34, height: 20)
-            .overlay(alignment: isOn ? .trailing : .leading) {
-                Circle()
-                    .fill(.white)
-                    .padding(2)
-                    .shadow(color: .black.opacity(0.22), radius: 1, y: 0.5)
-            }
-            .contentShape(Rectangle())
-            .opacity(isEnabled ? 1 : 0.45)
-            .onTapGesture {
-                guard isEnabled else { return }
-                withAnimation(.easeOut(duration: 0.16)) { isOn.toggle() }
-            }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityValue(isOn ? "включено" : "выключено")
+        // Именно Button, а не жест: так переключатель доступен с клавиатуры и
+        // VoiceOver, чего у самодельного тумблера на onTapGesture не было.
+        Button {
+            withAnimation(.easeOut(duration: 0.16)) { isOn.toggle() }
+        } label: {
+            Capsule()
+                .fill(isOn ? CurtyTheme.accent : Color.primary.opacity(0.22))
+                .frame(width: 34, height: 20)
+                .overlay(alignment: isOn ? .trailing : .leading) {
+                    Circle()
+                        .fill(.white)
+                        .padding(2)
+                        .shadow(color: .black.opacity(0.22), radius: 1, y: 0.5)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityValue(isOn ? "включено" : "выключено")
     }
 }
 

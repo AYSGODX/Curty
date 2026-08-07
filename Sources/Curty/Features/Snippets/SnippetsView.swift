@@ -99,7 +99,7 @@ struct SnippetsView: View {
                 body: target.source?.body ?? "",
                 onSave: { title, body in
                     if let source = target.source {
-                        store.update(source, title: title, body: body, tags: source.tags)
+                        store.update(source, title: title, body: body)
                     } else {
                         store.add(title: title, body: body)
                     }

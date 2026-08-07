@@ -17,11 +17,13 @@ struct ShelfItem: Identifiable, Equatable {
 
     var isAvailable: Bool { url != nil }
 
+    /// Только по расширению: isExecutableFile для файла вне контейнера
+    /// вызывается без открытого доступа и всегда отвечает «нет», то есть
+    /// половина проверки просто не работала. webloc и url добавлены потому,
+    /// что открывают произвольную ссылку без всякого предупреждения.
     var isPotentiallyExecutable: Bool {
-        let extensions = ["app", "pkg", "command", "workflow", "scpt", "dmg"]
-        if extensions.contains((name as NSString).pathExtension.lowercased()) { return true }
-        guard let url else { return false }
-        return FileManager.default.isExecutableFile(atPath: url.path)
+        let extensions = ["app", "pkg", "command", "workflow", "scpt", "dmg", "webloc", "url", "sh", "tool"]
+        return extensions.contains((name as NSString).pathExtension.lowercased())
     }
 }
 

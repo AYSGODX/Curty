@@ -30,7 +30,14 @@ struct AtomicJSONStore<Value: Codable> {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(value)
-        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        // Класс защиты выдаётся только внутри контейнера песочницы. Вне его —
+        // например, когда сборку запустили без подписи — запись с ним падает
+        // с EPERM, и без отката пользователь молча теряет всё, что вводил.
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch let failure as NSError where failure.code == NSFileWriteNoPermissionError {
+            try data.write(to: url, options: [.atomic])
+        }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import CurtyShared
 
 struct MediaView: View {
     @ObservedObject var store: MediaStore
@@ -63,11 +62,13 @@ struct MediaView: View {
                 }
 
                 if let snapshot = store.snapshot, snapshot.duration > 0 {
-                    MediaScrubber(
-                        position: snapshot.position,
-                        duration: snapshot.duration,
-                        onSeek: { store.seek(to: $0) }
-                    )
+                    TimelineView(.periodic(from: .now, by: 0.2)) { context in
+                        MediaScrubber(
+                            position: interpolated(snapshot, at: context.date),
+                            duration: snapshot.duration,
+                            onSeek: { store.seek(to: $0) }
+                        )
+                    }
                 }
                 }
             }
@@ -83,6 +84,14 @@ struct MediaView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    /// Опрос идёт раз в секунду, поэтому между ответами позиция досчитывается
+    /// по часам — без этого ползунок движется рывками.
+    private func interpolated(_ snapshot: MediaSnapshot, at date: Date) -> Double {
+        guard snapshot.isPlaying else { return snapshot.position }
+        let elapsed = max(0, date.timeIntervalSince(store.snapshotAt))
+        return min(snapshot.position + elapsed, snapshot.duration)
     }
 
     private var subtitle: String {

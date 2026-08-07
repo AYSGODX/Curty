@@ -70,6 +70,15 @@ struct SettingsPane: View {
                 }
 
                 section("Панель") {
+                    SettingsToggleRow(
+                        title: "Не мешать в полноэкранном режиме",
+                        detail: "Пока игра, видео или презентация занимают весь экран, шторка не раскрывается.",
+                        isOn: $preferences.respectFullScreenEnabled,
+                        isEnabled: true,
+                        stateLabel: preferences.respectFullScreenEnabled ? "Включено" : "Выключено",
+                        stateStyle: preferences.respectFullScreenEnabled ? .active : .inactive
+                    )
+                    Divider()
                     Text("Иконки в левом столбце можно перетаскивать, чтобы поставить нужный инструмент первым.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

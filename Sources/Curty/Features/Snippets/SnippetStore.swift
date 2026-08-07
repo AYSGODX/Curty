@@ -4,7 +4,6 @@ struct Snippet: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var body: String
-    var tags: [String]
     var modifiedAt: Date
 }
 
@@ -26,7 +25,6 @@ final class SnippetStore: ObservableObject {
         return items.filter {
             $0.title.localizedCaseInsensitiveContains(needle)
                 || $0.body.localizedCaseInsensitiveContains(needle)
-                || $0.tags.contains(where: { $0.localizedCaseInsensitiveContains(needle) })
         }
     }
 
@@ -38,7 +36,7 @@ final class SnippetStore: ObservableObject {
         }
     }
 
-    func add(title: String, body: String, tags: [String] = []) {
+    func add(title: String, body: String) {
         let value = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         items.insert(
@@ -46,7 +44,6 @@ final class SnippetStore: ObservableObject {
                 id: UUID(),
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 body: value,
-                tags: tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
                 modifiedAt: Date()
             ),
             at: 0
@@ -54,11 +51,10 @@ final class SnippetStore: ObservableObject {
         persist()
     }
 
-    func update(_ snippet: Snippet, title: String, body: String, tags: [String]) {
+    func update(_ snippet: Snippet, title: String, body: String) {
         guard let index = items.firstIndex(where: { $0.id == snippet.id }) else { return }
         items[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         items[index].body = body
-        items[index].tags = tags
         items[index].modifiedAt = Date()
         persist()
     }

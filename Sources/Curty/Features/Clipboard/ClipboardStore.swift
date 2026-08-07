@@ -20,6 +20,11 @@ struct ClipboardEntry: Identifiable, Equatable {
         }
     }
 
+    var imageBytes: Int {
+        if case .image(let data) = payload { return data.count }
+        return 0
+    }
+
     var symbol: String {
         switch payload {
         case .text(let text): return URL(string: text)?.scheme == "https" ? "link" : "text.alignleft"
@@ -33,6 +38,9 @@ enum ClipboardPolicy {
     static let maxEntries = 30
     static let maxTextCharacters = 100_000
     static let maxImageBytes = 20 * 1_024 * 1_024
+    /// Поэлементного лимита мало: тридцать снимков по двадцать мегабайт — это
+    /// шестьсот мегабайт в памяти фоновой утилиты.
+    static let maxImageBytesTotal = 200 * 1_024 * 1_024
     static let maxImagePixels = 40_000_000
 
     static let ignoredTypeNames: Set<String> = [
@@ -125,16 +133,6 @@ final class ClipboardStore: ObservableObject {
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount = NSPasteboard.general.changeCount
     private var timer: Timer?
-    private var workspaceObservers: [NSObjectProtocol] = []
-
-    init() {
-        let center = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
-            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.entries.removeAll() }
-            })
-        }
-    }
 
     func start() {
         guard timer == nil else { return }
@@ -168,6 +166,13 @@ final class ClipboardStore: ObservableObject {
             }
         }
         lastChangeCount = pasteboard.changeCount
+
+        // Часто используемая запись иначе постепенно вытесняется вниз и
+        // выпадает за лимит, хотя ей пользуются регулярно.
+        if let index = entries.firstIndex(where: { $0.id == entry.id }), index > 0 {
+            entries.remove(at: index)
+            entries.insert(entry, at: 0)
+        }
     }
 
     func saveImage(_ entry: ClipboardEntry) {
@@ -202,7 +207,11 @@ final class ClipboardStore: ObservableObject {
 
         guard let text = pasteboard.string(forType: .string) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, text.count <= ClipboardPolicy.maxTextCharacters else { return }
+        guard !trimmed.isEmpty else { return }
+        guard text.count <= ClipboardPolicy.maxTextCharacters else {
+            lastError = "Текст длиннее \(ClipboardPolicy.maxTextCharacters) символов в историю не попадает."
+            return
+        }
         record(.init(payload: .text(text), capturedAt: Date()))
     }
 
@@ -218,6 +227,18 @@ final class ClipboardStore: ObservableObject {
         entries.insert(entry, at: 0)
         if entries.count > ClipboardPolicy.maxEntries {
             entries.removeLast(entries.count - ClipboardPolicy.maxEntries)
+        }
+        enforceImageBudget()
+    }
+
+    private func enforceImageBudget() {
+        var total = entries.reduce(0) { $0 + $1.imageBytes }
+        guard total > ClipboardPolicy.maxImageBytesTotal else { return }
+        // Вытесняем самые старые картинки, текстовые записи не трогаем.
+        for index in entries.indices.reversed() where entries[index].imageBytes > 0 {
+            total -= entries[index].imageBytes
+            entries.remove(at: index)
+            if total <= ClipboardPolicy.maxImageBytesTotal { break }
         }
     }
 }

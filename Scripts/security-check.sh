@@ -30,9 +30,24 @@ done
 # out as a link rather than as image data. The entitlement is therefore expected,
 # but the code using it must stay in one file so it cannot quietly spread.
 ARTWORK_FILE="$ROOT/Sources/Curty/Features/Media/ArtworkLoader.swift"
-NETWORK_USERS="$(grep -rl 'URLSession' "$ROOT/Sources" 2>/dev/null || true)"
+
+# Однозначно сетевые API: им место только в загрузчике обложек.
+NETWORK_USERS="$(grep -rlE 'URLSession|NSURLConnection|CFReadStream' "$ROOT/Sources" 2>/dev/null || true)"
 if [ "$NETWORK_USERS" != "$ARTWORK_FILE" ]; then
-    echo "Network code must live only in ArtworkLoader.swift, found: ${NETWORK_USERS:-none}" >&2
+    echo "Сетевой код должен жить только в ArtworkLoader.swift, найден в: ${NETWORK_USERS:-нигде}" >&2
+    FAILURES=1
+fi
+
+# contentsOf: одинаково читает и файл, и http-адрес — грепом их не различить.
+# Поэтому список файлов, которым это позволено, задан явно: новое обращение
+# придётся внести сюда руками, то есть осознанно.
+CONTENTS_OF_ALLOWED="$ARTWORK_FILE
+$ROOT/Sources/Curty/Core/AtomicJSONStore.swift"
+CONTENTS_OF_USERS="$(grep -rlE '(Data|String)\(contentsOf' "$ROOT/Sources" 2>/dev/null || true)"
+UNEXPECTED="$(comm -23 <(echo "$CONTENTS_OF_USERS" | sort) <(echo "$CONTENTS_OF_ALLOWED" | sort) | grep -v '^$' || true)"
+if [ -n "$UNEXPECTED" ]; then
+    echo "contentsOf: вне списка разрешённых файлов: $UNEXPECTED" >&2
+    echo "Если это чтение локального файла — добавьте файл в CONTENTS_OF_ALLOWED." >&2
     FAILURES=1
 fi
 

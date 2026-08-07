@@ -36,6 +36,9 @@ struct PanelRootView: View {
                 .strokeBorder(.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.18), radius: 28, y: 14)
+        // Escape доходит только когда панель уже стала ключевой, то есть после
+        // клика по ней. Остальные случаи закрывает щелчок мимо панели.
+        .onExitCommand { model.requestPanelClose() }
         // Files land anywhere on the panel, not only on the Shelf screen: the
         // panel unfolds on whichever tool was last used, and hunting for the
         // right tab mid-drag is not something a shelf should ask for.
@@ -128,6 +131,9 @@ struct PanelRootView: View {
             .help(section.title)
             .accessibilityLabel(section.title)
             .accessibilityAddTraits(.isButton)
+            // Управление указателем — жест, поэтому активировать иконку иначе
+            // было нечем: VoiceOver объявлял кнопку, которая не срабатывает.
+            .accessibilityAction { model.select(section) }
     }
 
     /// Reordering is done by hand rather than with the system drag-and-drop:
@@ -247,7 +253,7 @@ struct PanelRootView: View {
             case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences)
             case .snippets: SnippetsView(store: model.snippets)
             case .calendar: CalendarView(store: model.calendar)
-            case .translate: TranslateView()
+            case .translate: TranslateView(store: model.translate)
             case .notes: NotesView(store: model.notes)
             case .settings: SettingsPane(model: model)
             }

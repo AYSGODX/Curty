@@ -6,6 +6,10 @@ CONFIGURATION="${1:-release}"
 APP="$ROOT/.build/Products/Curty.app"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 
+# Проверка границ должна выполняться сама, иначе README обещает гарантию,
+# которой нет: вручную её никто не запускает.
+"$ROOT/Scripts/security-check.sh"
+
 export SWIFTPM_MODULECACHE_OVERRIDE="$ROOT/.build/ModuleCache"
 export CLANG_MODULE_CACHE_PATH="$ROOT/.build/ModuleCache"
 

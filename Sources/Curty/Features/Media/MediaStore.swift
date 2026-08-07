@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import CurtyShared
 
 /// Seek is the only media command that carries a value, so the value can never
 /// be allowed to reach the script as anything but bare digits: clamped to the
@@ -227,6 +226,9 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
 @MainActor
 final class MediaStore: ObservableObject {
     @Published private(set) var snapshot: MediaSnapshot?
+    /// Когда снимок сделан: между опросами ползунок досчитывает позицию сам,
+    /// иначе он дёргается раз в секунду.
+    @Published private(set) var snapshotAt = Date.distantPast
     @Published private(set) var isEnabled = false
     @Published private(set) var needsAutomationPermission = false
     @Published var lastError: String?
@@ -326,6 +328,7 @@ final class MediaStore: ObservableObject {
                 switch result {
                 case .success(let snapshot):
                     self.snapshot = snapshot
+                    self.snapshotAt = Date()
                     self.artwork.load(from: snapshot?.artworkURL ?? "")
                     self.lastError = nil
                     self.needsAutomationPermission = false

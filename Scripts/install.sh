@@ -67,7 +67,10 @@ rm -f "$BUILD_LOG"
 
 # --- Установка --------------------------------------------------------------
 
-# Работающую копию надо закрыть, иначе заменяется файл под запущенным процессом.
+# Сначала вежливо: по сигналу applicationWillTerminate не вызывается, и
+# несохранённая правка заметки теряется. pkill остаётся как запасной вариант.
+osascript -e 'tell application id "dev.curty.app" to quit' >/dev/null 2>&1 || true
+sleep 2
 pkill -f "$APP_NAME/Contents/MacOS/Curty" 2>/dev/null || true
 sleep 1
 

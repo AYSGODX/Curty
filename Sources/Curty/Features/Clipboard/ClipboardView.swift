@@ -3,6 +3,7 @@ import SwiftUI
 struct ClipboardView: View {
     @ObservedObject var store: ClipboardStore
     @ObservedObject var preferences: Preferences
+    @State private var isConfirmingClear = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -26,7 +27,7 @@ struct ClipboardView: View {
 
                 if !store.entries.isEmpty {
                     Button {
-                        store.clear()
+                        isConfirmingClear = true
                     } label: {
                         Label("Очистить", systemImage: "trash")
                             .font(.caption)
@@ -132,6 +133,15 @@ struct ClipboardView: View {
             if let error = store.lastError {
                 CurtyErrorRow(message: error) { store.lastError = nil }
             }
+        }
+        .confirmationDialog(
+            "Очистить историю буфера?",
+            isPresented: $isConfirmingClear
+        ) {
+            Button("Очистить", role: .destructive) { store.clear() }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("История хранится только в памяти, восстановить её будет нельзя.")
         }
     }
 }

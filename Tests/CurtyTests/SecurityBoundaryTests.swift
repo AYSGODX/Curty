@@ -1,7 +1,6 @@
 import AppKit
 import XCTest
 @testable import Curty
-import CurtyShared
 
 final class SecurityBoundaryTests: XCTestCase {
     func testMeetingLinksRequireHTTPSAndApprovedHost() {
@@ -120,17 +119,7 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
-    func testMediaWireFormatRoundTripAndCommandAllowlist() throws {
-        let original = MediaSnapshot(
-            source: "Music",
-            title: "Track",
-            artist: "Artist",
-            album: "Album",
-            isPlaying: true,
-            duration: 120,
-            position: 15
-        )
-        XCTAssertEqual(try MediaWireFormat.decode(MediaWireFormat.encode(original)), original)
+    func testMediaCommandsStayAFixedAllowlist() {
         XCTAssertNil(MediaCommand(rawValue: "run arbitrary script"))
         XCTAssertEqual(Set(MediaCommand.allCases.map(\.rawValue)), ["togglePlayPause", "next", "previous"])
     }
@@ -163,8 +152,12 @@ final class SecurityBoundaryTests: XCTestCase {
             leftAuxiliaryArea: nil,
             rightAuxiliaryArea: nil
         )
-        XCTAssertTrue(fallback.contains(NSPoint(x: frame.midX, y: frame.maxY - 20)))
-        XCTAssertGreaterThanOrEqual(fallback.height, 34)
+        // Без выреза зона намеренно тонкая и живёт по центру верхнего края:
+        // курсор должен упереться в край экрана, а не проехать мимо.
+        XCTAssertFalse(fallback.contains(NSPoint(x: frame.midX, y: frame.maxY - 20)))
+        XCTAssertTrue(fallback.contains(NSPoint(x: frame.midX, y: frame.maxY - 1)))
+        XCTAssertFalse(fallback.contains(NSPoint(x: frame.minX + 10, y: frame.maxY - 1)))
+        XCTAssertLessThanOrEqual(fallback.height, 8)
         XCTAssertLessThanOrEqual(PanelInteractionPolicy.sampleInterval, 1.0 / 60.0)
         XCTAssertLessThanOrEqual(PanelInteractionPolicy.closeDelay, 0.225)
         XCTAssertGreaterThan(PanelInteractionPolicy.idleSampleInterval, PanelInteractionPolicy.sampleInterval)

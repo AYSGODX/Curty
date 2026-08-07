@@ -8,20 +8,14 @@ let package = Package(
         .executable(name: "Curty", targets: ["Curty"]),
     ],
     targets: [
-        .target(
-            name: "CurtyShared",
-            path: "Sources/CurtyShared",
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
         .executableTarget(
             name: "Curty",
-            dependencies: ["CurtyShared"],
             path: "Sources/Curty",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
             name: "CurtyTests",
-            dependencies: ["Curty", "CurtyShared"],
+            dependencies: ["Curty"],
             path: "Tests/CurtyTests"
         ),
     ]

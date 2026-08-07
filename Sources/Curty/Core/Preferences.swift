@@ -57,6 +57,7 @@ final class Preferences: ObservableObject {
         static let clipboardImages = "privacy.clipboardImages"
         static let mediaIntegration = "privacy.mediaIntegration"
         static let toolOrder = "layout.toolOrder"
+        static let respectFullScreen = "layout.respectFullScreen"
     }
 
     private let defaults: UserDefaults
@@ -72,6 +73,12 @@ final class Preferences: ObservableObject {
 
     @Published var mediaIntegrationEnabled: Bool {
         didSet { defaults.set(mediaIntegrationEnabled, forKey: Key.mediaIntegration) }
+    }
+
+    /// Пока приложение развёрнуто на весь экран — игра, презентация, видео —
+    /// шторка не раскрывается: курсор к верхней кромке там ходит по делу.
+    @Published var respectFullScreenEnabled: Bool {
+        didSet { defaults.set(respectFullScreenEnabled, forKey: Key.respectFullScreen) }
     }
 
     /// Raw values of the rail tools in the user's own order. Empty means "never
@@ -101,10 +108,12 @@ final class Preferences: ObservableObject {
             Key.clipboardMonitoring: true,
             Key.clipboardImages: false,
             Key.mediaIntegration: true,
+            Key.respectFullScreen: true,
         ])
         clipboardMonitoringEnabled = defaults.bool(forKey: Key.clipboardMonitoring)
         clipboardImagesEnabled = defaults.bool(forKey: Key.clipboardImages)
         mediaIntegrationEnabled = defaults.bool(forKey: Key.mediaIntegration)
+        respectFullScreenEnabled = defaults.bool(forKey: Key.respectFullScreen)
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }
