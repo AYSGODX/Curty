@@ -77,6 +77,9 @@ final class CalendarStore: ObservableObject {
 
     init() { refreshAuthorization() }
 
+    /// Пока системный запрос на экране, панель должна уступить ему уровень.
+    var onPermissionPromptChange: ((Bool) -> Void)?
+
     func refreshAuthorization() {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess:
@@ -95,9 +98,14 @@ final class CalendarStore: ObservableObject {
             refreshAuthorization()
             return
         }
+        // Панель висит на уровне строки меню, то есть выше системного запроса:
+        // без этого диалог о доступе к календарю открывался под шторкой, и
+        // человек видел только то, что ничего не происходит.
+        onPermissionPromptChange?(true)
         eventStore.requestFullAccessToEvents { [weak self] granted, error in
             Task { @MainActor in
                 guard let self else { return }
+                self.onPermissionPromptChange?(false)
                 if let error { self.lastError = error.localizedDescription }
                 self.authorization = granted ? .granted : .denied
                 if granted {

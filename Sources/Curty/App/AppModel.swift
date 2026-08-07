@@ -144,6 +144,9 @@ final class AppModel: ObservableObject {
             .store(in: &cancellables)
 
         clipboard.onImageSaved = { [weak shelf] url in shelf?.addOwnedFile(url) }
+        calendar.onPermissionPromptChange = { [weak self] isPresenting in
+            self?.isPresentingDialog = isPresenting
+        }
     }
 
     func start() {
