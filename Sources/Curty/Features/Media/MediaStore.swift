@@ -287,6 +287,9 @@ final class MediaStore: ObservableObject {
     private var timer: Timer?
     private var isRefreshing = false
     private var requestStartedAt: TimeInterval = 0
+    private var isUserRequestInFlight = false
+    /// Уровень, к которому вернуться после снятия немоты.
+    private var volumeBeforeMute: Double?
     private var generation = 0
     private var isPanelVisible = false
 
@@ -346,13 +349,29 @@ final class MediaStore: ObservableObject {
     /// until the app was restarted. Past the timeout the in-flight request is
     /// abandoned: its generation is retired so a late reply cannot land, and a
     /// fresh request takes over.
-    private func beginRequest() -> Bool {
+    /// Опрос идёт раз в секунду, и пока он в полёте, сторож молча отклонял
+    /// нажатия: клик по дорожке просто пропадал — отсюда «не всегда
+    /// перепрыгивает». Действие человека важнее фонового опроса и вытесняет
+    /// его; ответ опроса отбрасывается по смене поколения. Друг друга действия
+    /// не вытесняют: там остаётся прежняя защита по таймауту, чтобы зависший
+    /// скрипт не собрал за собой очередь.
+    #if DEBUG
+    /// Правило вытеснения — причина исправленной жалобы, а не деталь: проверять
+    /// его через живой AppleScript было бы нечем.
+    func beginRequestForTesting(userInitiated: Bool) -> Bool {
+        beginRequest(userInitiated: userInitiated)
+    }
+    #endif
+
+    private func beginRequest(userInitiated: Bool = false) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
         if isRefreshing {
-            guard now - requestStartedAt >= Self.requestTimeout else { return false }
+            let preemptsPoll = userInitiated && !isUserRequestInFlight
+            guard preemptsPoll || now - requestStartedAt >= Self.requestTimeout else { return false }
             generation += 1
         }
         isRefreshing = true
+        isUserRequestInFlight = userInitiated
         requestStartedAt = now
         return true
     }
@@ -420,7 +439,10 @@ final class MediaStore: ObservableObject {
                 switch result {
                 case .success:
                     self.lastError = nil
-                    self.refresh()
+                    // Раньше здесь стоял немедленный опрос — и он часто
+                    // возвращал позицию до перемотки, потому что плеер ещё не
+                    // успел её применить: ползунок отскакивал назад. Обычный
+                    // опрос через секунду подтвердит и так.
                 case .failure(let error):
                     self.lastError = error.localizedDescription
                 }
@@ -428,8 +450,23 @@ final class MediaStore: ObservableObject {
         }
     }
 
+    /// Немота — это громкость 0 с запомненным уровнем: у плееров нет
+    /// отдельного признака, а гасить системный звук мы не вправе.
+    func toggleMute() {
+        guard let volume = snapshot?.volume else { return }
+        if volume > 0 {
+            volumeBeforeMute = volume
+            setVolume(0)
+        } else {
+            // Плеер могли заглушить и мимо Curty — тогда возвращать не к чему,
+            // и половина громкости лучше, чем тишина в ответ на нажатие.
+            setVolume(volumeBeforeMute ?? 50)
+            volumeBeforeMute = nil
+        }
+    }
+
     func setVolume(_ value: Double) {
-        guard isEnabled, let current = snapshot, current.volume != nil, beginRequest() else { return }
+        guard isEnabled, let current = snapshot, current.volume != nil, beginRequest(userInitiated: true) else { return }
         let target = MediaVolumePolicy.clamp(value)
         // Ползунок встаёт сразу; следующий опрос через секунду это подтвердит.
         snapshot?.volume = target
@@ -452,10 +489,14 @@ final class MediaStore: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        guard isEnabled, let current = snapshot, current.duration > 0, beginRequest() else { return }
+        guard isEnabled, let current = snapshot, current.duration > 0, beginRequest(userInitiated: true) else { return }
         let target = MediaSeekPolicy.clamp(seconds, duration: current.duration)
         // Move the scrubber right away; the next poll confirms it a second later.
         snapshot?.position = target
+        // Вместе с позицией сдвигается и точка отсчёта: без неё интерполяция
+        // между опросами добавила бы к новой позиции время, прошедшее с
+        // прошлого ответа, и ползунок уехал бы дальше места клика.
+        snapshotAt = Date()
         let adapter = self.adapter
         let source = current.source
         let requestGeneration = generation
@@ -467,7 +508,10 @@ final class MediaStore: ObservableObject {
                 switch result {
                 case .success:
                     self.lastError = nil
-                    self.refresh()
+                    // Раньше здесь стоял немедленный опрос — и он часто
+                    // возвращал позицию до перемотки, потому что плеер ещё не
+                    // успел её применить: ползунок отскакивал назад. Обычный
+                    // опрос через секунду подтвердит и так.
                 case .failure(let error):
                     self.lastError = error.localizedDescription
                 }

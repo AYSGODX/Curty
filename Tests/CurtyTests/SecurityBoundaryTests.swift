@@ -218,6 +218,18 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
+    @MainActor
+    func testUserActionIsNotSwallowedByAPollInFlight() {
+        let store = MediaStore()
+        // Опрос занял канал. Раньше нажатие в этот момент просто пропадало —
+        // отсюда «клик по дорожке не всегда срабатывает».
+        XCTAssertTrue(store.beginRequestForTesting(userInitiated: false))
+        XCTAssertTrue(store.beginRequestForTesting(userInitiated: true))
+        // А вот второе действие подряд ждёт: очередь из зависших скриптов
+        // никому не нужна.
+        XCTAssertFalse(store.beginRequestForTesting(userInitiated: true))
+    }
+
     func testMediaVolumeStaysInRangeAndFormatsWithoutSeparators() {
         XCTAssertEqual(MediaVolumePolicy.clamp(-40), 0)
         XCTAssertEqual(MediaVolumePolicy.clamp(180), 100)

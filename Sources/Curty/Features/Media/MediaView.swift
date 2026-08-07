@@ -74,7 +74,11 @@ struct MediaView: View {
                 // Громкость самого плеера. Ползунок появляется, только если
                 // плеер её сообщил: выдуманный ноль хуже, чем ничего.
                 if let volume = store.snapshot?.volume {
-                    MediaVolumeSlider(volume: volume) { store.setVolume($0) }
+                    MediaVolumeSlider(
+                        volume: volume,
+                        onChange: { store.setVolume($0) },
+                        onToggleMute: { store.toggleMute() }
+                    )
                 }
                 }
             }
@@ -144,14 +148,65 @@ struct MediaView: View {
 /// Position within the track, draggable to seek. While a drag is in flight the
 /// local fraction wins, otherwise the once-a-second poll would yank the handle
 /// back under the user's finger.
+/// Полоса с точкой на конце заливки. Сама полоса тонкая, а нажимается вся
+/// высота: в пять пунктов попасть мышью трудно, и промах по дорожке читается
+/// как «не сработало».
+private struct TrackBar: View {
+    let fraction: Double
+    /// Зовётся и в процессе перетаскивания, и по отпусканию: первое двигает
+    /// картинку, второе отправляет команду плееру.
+    let onScrub: (Double) -> Void
+    let onCommit: (Double) -> Void
+
+    private static let barHeight: CGFloat = 5
+    private static let knobSize: CGFloat = 9
+    private static let hitHeight: CGFloat = 18
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let filled = width * min(max(fraction, 0), 1)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.primary.opacity(0.12))
+                    .frame(height: Self.barHeight)
+                Capsule()
+                    .fill(CurtyTheme.accent)
+                    .frame(width: filled, height: Self.barHeight)
+                Circle()
+                    .fill(CurtyTheme.accent)
+                    .frame(width: Self.knobSize, height: Self.knobSize)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                    // Точка стоит центром на конце заливки и не вылезает за
+                    // края полосы на нуле и на максимуме.
+                    .offset(x: min(max(filled - Self.knobSize / 2, 0), max(width - Self.knobSize, 0)))
+            }
+            .frame(width: width, height: proxy.size.height, alignment: .leading)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { onScrub(Self.fraction(at: $0.location.x, width: width)) }
+                    .onEnded { onCommit(Self.fraction(at: $0.location.x, width: width)) }
+            )
+        }
+        .frame(height: Self.hitHeight)
+    }
+
+    private static func fraction(at x: CGFloat, width: CGFloat) -> Double {
+        guard width > 0 else { return 0 }
+        return min(max(Double(x / width), 0), 1)
+    }
+}
+
 private struct MediaVolumeSlider: View {
     let volume: Double
     let onChange: (Double) -> Void
+    let onToggleMute: () -> Void
 
     @State private var dragValue: Double?
 
     private var current: Double { dragValue ?? volume }
-    private var fraction: Double { min(max(current / 100, 0), 1) }
 
     private var symbol: String {
         switch current {
@@ -164,46 +219,29 @@ private struct MediaVolumeSlider: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                // Ширина фиксирована: значок меняется вместе с громкостью, и
-                // без этого ползунок дёргался бы при каждом переключении.
-                .frame(width: 16, alignment: .leading)
+            CurtyRowButton(
+                systemName: symbol,
+                title: current < 1 ? "Вернуть звук" : "Заглушить",
+                size: 20,
+                glyphSize: 11,
+                action: onToggleMute
+            )
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.primary.opacity(0.12))
-                    Capsule()
-                        .fill(CurtyTheme.accent)
-                        .frame(width: proxy.size.width * fraction)
+            TrackBar(
+                fraction: current / 100,
+                onScrub: { dragValue = $0 * 100 },
+                onCommit: { fraction in
+                    dragValue = nil
+                    onChange(fraction * 100)
                 }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            dragValue = Self.value(at: value.location.x, width: proxy.size.width)
-                        }
-                        .onEnded { value in
-                            let target = Self.value(at: value.location.x, width: proxy.size.width)
-                            dragValue = nil
-                            onChange(target)
-                        }
-                )
-            }
-            .frame(height: 5)
+            )
 
             Text("\(Int(current.rounded()))")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 24, alignment: .trailing)
         }
-        .help("Громкость плеера")
-    }
-
-    private static func value(at x: CGFloat, width: CGFloat) -> Double {
-        guard width > 0 else { return 0 }
-        return MediaVolumePolicy.clamp(Double(x / width) * 100)
+        .accessibilityLabel("Громкость плеера")
     }
 }
 
@@ -221,28 +259,15 @@ private struct MediaScrubber: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.primary.opacity(0.12))
-                    Capsule()
-                        .fill(CurtyTheme.accent)
-                        .frame(width: proxy.size.width * fraction)
+        VStack(spacing: 0) {
+            TrackBar(
+                fraction: fraction,
+                onScrub: { dragFraction = $0 },
+                onCommit: { target in
+                    dragFraction = nil
+                    onSeek(target * duration)
                 }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            dragFraction = Self.fraction(at: value.location.x, width: proxy.size.width)
-                        }
-                        .onEnded { value in
-                            let target = Self.fraction(at: value.location.x, width: proxy.size.width)
-                            dragFraction = nil
-                            onSeek(target * duration)
-                        }
-                )
-            }
-            .frame(height: 5)
+            )
 
             HStack {
                 Text(Self.timeLabel(fraction * duration))
@@ -253,11 +278,6 @@ private struct MediaScrubber: View {
             .foregroundStyle(.secondary)
         }
         .accessibilityLabel("Позиция в треке")
-    }
-
-    private static func fraction(at x: CGFloat, width: CGFloat) -> Double {
-        guard width > 0 else { return 0 }
-        return min(max(Double(x / width), 0), 1)
     }
 
     private static func timeLabel(_ seconds: Double) -> String {
