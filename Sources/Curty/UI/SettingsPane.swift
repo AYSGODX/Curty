@@ -71,6 +71,10 @@ struct SettingsPane: View {
                     }
                 }
 
+                section("Время") {
+                    timeZoneRow
+                }
+
                 section("Обновление") {
                     updateSection
                 }
@@ -119,6 +123,47 @@ struct SettingsPane: View {
         } message: {
             Text("История буфера, ссылки с полки, сниппеты и заметки будут стёрты. Это нельзя отменить.")
         }
+    }
+
+    private var timeZoneRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Показывать время в поясе")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Пригодится, если часы на маке не совпадают с местом, где вы находитесь. По умолчанию Curty берёт пояс системы.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Menu(timeZoneLabel) {
+                Button("Системный — \(DisplayTimeZonePolicy.cityName(TimeZone.current.identifier))") {
+                    preferences.displayTimeZoneIdentifier = ""
+                }
+                Divider()
+                // Плоский список из шестисот поясов в меню шторки не помещается,
+                // поэтому он разбит по частям света.
+                ForEach(DisplayTimeZonePolicy.groupedIdentifiers, id: \.region) { group in
+                    Menu(group.region) {
+                        ForEach(group.identifiers, id: \.self) { identifier in
+                            Button(DisplayTimeZonePolicy.cityName(identifier)) {
+                                preferences.displayTimeZoneIdentifier = identifier
+                            }
+                        }
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 150)
+        }
+    }
+
+    private var timeZoneLabel: String {
+        preferences.displayTimeZoneIdentifier.isEmpty
+            ? "Системный"
+            : DisplayTimeZonePolicy.cityName(preferences.displayTimeZoneIdentifier)
     }
 
     @ViewBuilder

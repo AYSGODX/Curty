@@ -2,7 +2,10 @@ import SwiftUI
 
 struct CalendarView: View {
     @ObservedObject var store: CalendarStore
+    @ObservedObject var preferences: Preferences
     let onHandOff: () -> Void
+
+    private var zone: TimeZone { preferences.displayTimeZone }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -14,9 +17,16 @@ struct CalendarView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(store.horizon.heading)
                             .font(.system(size: 15, weight: .semibold))
-                        Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
+                        Text(Date.now.formatted(Date.FormatStyle(timeZone: zone).weekday(.wide).month(.wide).day()))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        // Пояс отличается от системного: без этой строки 19:00
+                        // в Curty против 15:00 в «Календаре» читается как сбой.
+                        if preferences.isDisplayTimeZoneOverridden {
+                            Text("Время по \(DisplayTimeZonePolicy.cityName(zone.identifier))")
+                                .font(.caption2)
+                                .foregroundStyle(CurtyTheme.accent)
+                        }
                     }
                     Spacer()
                     horizonSwitcher
@@ -91,12 +101,12 @@ struct CalendarView: View {
                         ForEach(meetings) { meeting in
                             HStack(spacing: 10) {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(meeting.start, style: .time)
+                                    Text(meeting.start.formatted(Date.FormatStyle(time: .shortened, timeZone: zone)))
                                         .font(.caption.monospacedDigit())
                                         .foregroundStyle(CurtyTheme.accent)
                                     // In week mode the time alone is ambiguous.
-                                    if !Calendar.current.isDateInToday(meeting.start) {
-                                        Text(meeting.start, format: .dateTime.weekday(.abbreviated).day())
+                                    if !DisplayTimeZonePolicy.calendar(for: zone).isDateInToday(meeting.start) {
+                                        Text(meeting.start.formatted(Date.FormatStyle(timeZone: zone).weekday(.abbreviated).day()))
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }

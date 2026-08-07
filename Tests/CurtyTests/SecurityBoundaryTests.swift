@@ -103,6 +103,35 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertNil(store.pendingDeletion)
     }
 
+    func testDisplayTimeZoneFallsBackToTheSystemUnlessDeliberatelySet() {
+        // Умолчание — пустая строка: у всех, кто настройку не трогал, время
+        // показывается ровно как раньше.
+        XCTAssertEqual(DisplayTimeZonePolicy.resolve(identifier: "").identifier, TimeZone.current.identifier)
+        XCTAssertFalse(DisplayTimeZonePolicy.isOverridden(identifier: ""))
+        // Мусор в настройке не должен ломать показ времени.
+        XCTAssertEqual(DisplayTimeZonePolicy.resolve(identifier: "Чепуха/Нет").identifier, TimeZone.current.identifier)
+
+        let vietnam = "Asia/Ho_Chi_Minh"
+        XCTAssertEqual(DisplayTimeZonePolicy.resolve(identifier: vietnam).identifier, vietnam)
+        XCTAssertEqual(
+            DisplayTimeZonePolicy.isOverridden(identifier: vietnam),
+            TimeZone(identifier: vietnam)!.secondsFromGMT() != TimeZone.current.secondsFromGMT()
+        )
+        XCTAssertEqual(DisplayTimeZonePolicy.cityName(vietnam), "Ho Chi Minh")
+    }
+
+    func testDisplayTimeZoneChangesWhatDayItIs() {
+        // 20:30 UTC — во Вьетнаме это уже следующий день, в Москве ещё нет.
+        let moment = Date(timeIntervalSince1970: 1_754_598_600)
+        let vietnam = DisplayTimeZonePolicy.calendar(for: TimeZone(identifier: "Asia/Ho_Chi_Minh")!)
+        let moscow = DisplayTimeZonePolicy.calendar(for: TimeZone(identifier: "Europe/Moscow")!)
+        XCTAssertNotEqual(
+            vietnam.component(.day, from: moment),
+            moscow.component(.day, from: moment),
+            "календарь должен считать сутки по выбранному поясу, иначе «сегодня» разъезжается"
+        )
+    }
+
     @MainActor
     func testCalendarShowsOnlyWhatIsStillAhead() {
         let now = Date(timeIntervalSince1970: 1_000_000)

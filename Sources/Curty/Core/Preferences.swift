@@ -58,6 +58,7 @@ final class Preferences: ObservableObject {
         static let mediaIntegration = "privacy.mediaIntegration"
         static let toolOrder = "layout.toolOrder"
         static let respectFullScreen = "layout.respectFullScreen"
+        static let displayTimeZone = "layout.displayTimeZone"
     }
 
     private let defaults: UserDefaults
@@ -79,6 +80,19 @@ final class Preferences: ObservableObject {
     /// шторка не раскрывается: курсор к верхней кромке там ходит по делу.
     @Published var respectFullScreenEnabled: Bool {
         didSet { defaults.set(respectFullScreenEnabled, forKey: Key.respectFullScreen) }
+    }
+
+    /// Идентификатор пояса, в котором показывать время. Пустая строка —
+    /// системный, и это умолчание: у всех, кто настройку не трогал, ничего
+    /// не меняется.
+    @Published var displayTimeZoneIdentifier: String {
+        didSet { defaults.set(displayTimeZoneIdentifier, forKey: Key.displayTimeZone) }
+    }
+
+    var displayTimeZone: TimeZone { DisplayTimeZonePolicy.resolve(identifier: displayTimeZoneIdentifier) }
+
+    var isDisplayTimeZoneOverridden: Bool {
+        DisplayTimeZonePolicy.isOverridden(identifier: displayTimeZoneIdentifier)
     }
 
     /// Raw values of the rail tools in the user's own order. Empty means "never
@@ -114,6 +128,7 @@ final class Preferences: ObservableObject {
         clipboardImagesEnabled = defaults.bool(forKey: Key.clipboardImages)
         mediaIntegrationEnabled = defaults.bool(forKey: Key.mediaIntegration)
         respectFullScreenEnabled = defaults.bool(forKey: Key.respectFullScreen)
+        displayTimeZoneIdentifier = defaults.string(forKey: Key.displayTimeZone) ?? ""
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }
