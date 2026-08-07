@@ -102,13 +102,17 @@ struct ShelfView: View {
             return .handled
         }
         // ⌘C копирует выделенный файл — то же самое, что кнопка рядом с ним.
-        .onKeyPress(keys: ["c"], phases: .down) { press in
-            guard press.modifiers.contains(.command),
-                  let item = store.items.first(where: { $0.id == selectedID }),
-                  item.isAvailable else { return .ignored }
-            store.copy(item)
-            copyConfirmation = CopyConfirmation(itemID: item.id, token: UUID())
-            return .handled
+        // Сочетание держит именно кнопка, а не onKeyPress: события с Command
+        // приходят в окно как key equivalent и до обработчика нажатий не
+        // доходят вовсе — клавиша проваливалась в системный сигнал. Кнопка
+        // живёт только пока открыта полка, поэтому ⌘C в других вкладках
+        // по-прежнему достаётся полям ввода.
+        .background {
+            Button("Копировать выделенный файл") { copySelected() }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(selectedItem == nil)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .confirmationDialog(
             "Убрать все файлы с полки?",
@@ -196,6 +200,16 @@ struct ShelfView: View {
             guard let url = item.url else { return NSItemProvider() }
             return NSItemProvider(object: url as NSURL)
         }
+    }
+
+    private var selectedItem: ShelfItem? {
+        store.items.first { $0.id == selectedID && $0.isAvailable }
+    }
+
+    private func copySelected() {
+        guard let item = selectedItem else { return }
+        store.copy(item)
+        copyConfirmation = CopyConfirmation(itemID: item.id, token: UUID())
     }
 
     private struct CopyConfirmation: Equatable {
