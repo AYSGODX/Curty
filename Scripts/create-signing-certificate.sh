@@ -23,13 +23,14 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# LibreSSL из системы, а не свежий OpenSSL из Homebrew: последний упаковывает
-# PKCS#12 шифрами, которые security import на macOS не читает.
+# Системный LibreSSL, а не свежий OpenSSL из Homebrew: последний упаковывает
+# PKCS#12 шифрами, которые встроенный импорт не читает.
 OPENSSL=/usr/bin/openssl
 
 # Пароль временный и случайный: он нужен только чтобы перенести ключ из файла
-# в связку. С пустым паролем macOS отвергает контейнер — проверено.
-PASSPHRASE="$($OPENSSL rand -hex 16)"
+# в связку, и живёт секунду. С пустым паролем macOS отвергает контейнер —
+# проверено на отдельной связке ключей.
+PASSPHRASE="$("$OPENSSL" rand -hex 16)"
 
 echo "Создаю сертификат «$NAME»…"
 "$OPENSSL" req -x509 -newkey rsa:2048 -nodes -days 3650 \
@@ -41,42 +42,13 @@ echo "Создаю сертификат «$NAME»…"
 "$OPENSSL" pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
     -out "$WORK/bundle.p12" -passout "pass:$PASSPHRASE" -name "$NAME" 2>/dev/null
 
-security import на macOS не читает.
-OPENSSL=/usr/bin/openssl
-
-cat > "$WORK/openssl.cnf" <<CONFIG
-[ req ]
-distinguished_name = dn
-x509_extensions = v3
-prompt = no
-
-[ dn ]
-CN = $NAME
-
-[ v3 ]
-basicConstraints = critical,CA:false
-keyUsage = critical,digitalSignature
-extendedKeyUsage = critical,codeSigning
-CONFIG
-
-echo "Создаю сертификат «$NAME»…"
-"$OPENSSL" req -x509 -newkey rsa:2048 -nodes -days 3650 \
-    -keyout "$WORK/key.pem" -out "$WORK/cert.pem" \
-    -config "$WORK/openssl.cnf" 2>/dev/null
-"$OPENSSL" pkcs12 -export -legacy \
-    -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
-    -out "$WORK/bundle.p12" -passout pass: -name "$NAME" 2>/dev/null \
-    || "$OPENSSL" pkcs12 -export \
-        -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
-        -out "$WORK/bundle.p12" -passout pass: -name "$NAME"
-
 # -T разрешает codesign пользоваться ключом молча: без этого macOS спрашивала бы
 # подтверждение при каждой сборке.
 security import "$WORK/bundle.p12" -k "$LOGIN_KEYCHAIN" -P "$PASSPHRASE" -T /usr/bin/codesign >/dev/null
 
 echo
 echo "Сейчас macOS спросит пароль — она добавляет сертификат в доверенные."
-echo "Это нужно, чтобы система считала подпись действительной."
+echo "Без этого система не считает подпись действительной."
 security add-trusted-cert -p codeSign -k "$LOGIN_KEYCHAIN" "$WORK/cert.pem"
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$NAME\""; then
@@ -90,7 +62,7 @@ if security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$NAME\""; 
 else
     echo
     echo "Сертификат создан, но система пока не считает его пригодным для подписи." >&2
-    echo "Доверие можно проставить вручную: откройте «Связку ключей»" >&2
+    echo "Доверие можно проставить вручную — откройте «Связку ключей»:" >&2
     echo >&2
     echo "    open \"/System/Library/CoreServices/Applications/Keychain Access.app\"" >&2
     echo >&2
