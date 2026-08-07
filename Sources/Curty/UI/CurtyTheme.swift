@@ -197,6 +197,9 @@ struct CurtyRowButton: View {
     /// Set for actions whose result is invisible — copying above all — so the
     /// button briefly turns into a tick and says the deed is done.
     var confirmsWith: String?
+    /// То же действие бывает доступно с клавиатуры, а галочка должна выглядеть
+    /// одинаково в обоих случаях. Новое значение — новое подтверждение.
+    var confirmationToken: UUID?
     let action: () -> Void
 
     @State private var isHovering = false
@@ -228,6 +231,10 @@ struct CurtyRowButton: View {
         }
         .help(title)
         .accessibilityLabel(title)
+        .onChange(of: confirmationToken) { _, token in
+            guard token != nil else { return }
+            confirmIfNeeded()
+        }
     }
 
     private func confirmIfNeeded() {

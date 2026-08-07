@@ -7,6 +7,9 @@ struct ShelfView: View {
     @State private var pendingExecutable: ShelfItem?
     @State private var isConfirmingClear = false
     @State private var selectedID: UUID?
+    /// Какую кнопку копирования подсветить галочкой после ⌘C и каким разом:
+    /// повторное нажатие по тому же файлу должно подтверждаться заново.
+    @State private var copyConfirmation: CopyConfirmation?
     @FocusState private var isListFocused: Bool
 
     var body: some View {
@@ -98,6 +101,15 @@ struct ShelfView: View {
             quickLook(item)
             return .handled
         }
+        // ⌘C копирует выделенный файл — то же самое, что кнопка рядом с ним.
+        .onKeyPress(keys: ["c"], phases: .down) { press in
+            guard press.modifiers.contains(.command),
+                  let item = store.items.first(where: { $0.id == selectedID }),
+                  item.isAvailable else { return .ignored }
+            store.copy(item)
+            copyConfirmation = CopyConfirmation(itemID: item.id, token: UUID())
+            return .handled
+        }
         .confirmationDialog(
             "Убрать все файлы с полки?",
             isPresented: $isConfirmingClear
@@ -186,6 +198,13 @@ struct ShelfView: View {
         }
     }
 
+    private struct CopyConfirmation: Equatable {
+        let itemID: UUID
+        let token: UUID
+
+        func token(for id: UUID) -> UUID? { itemID == id ? token : nil }
+    }
+
     private func rowIcon(for item: ShelfItem) -> String {
         if !item.isAvailable { return "questionmark.folder" }
         return item.isPotentiallyExecutable ? "exclamationmark.shield" : "doc"
@@ -209,11 +228,12 @@ struct ShelfView: View {
 
             CurtyRowButton(
                 systemName: "doc.on.doc",
-                title: "Копировать файл",
+                title: "Копировать файл (⌘C)",
                 size: CurtyTheme.rowActionSize,
                 glyphSize: 13,
                 isEnabled: item.isAvailable,
-                confirmsWith: "checkmark"
+                confirmsWith: "checkmark",
+                confirmationToken: copyConfirmation?.token(for: item.id)
             ) { store.copy(item) }
 
             Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
