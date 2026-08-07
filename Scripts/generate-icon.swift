@@ -37,6 +37,17 @@ let glyphScale: CGFloat = 0.62
 
 let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
+/// Исходник бывает двух видов, и обращаться с ними надо по-разному: знак на
+/// прозрачном фоне нужно положить на подложку, а готовое лицо иконки — залить
+/// им всю плитку. Отличаем по углам: если они непрозрачны, фон нарисован.
+let isFullBleed: Bool = {
+    var pixel = [UInt8](repeating: 0, count: 4)
+    let probe = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                          space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    probe.draw(logo, in: CGRect(x: 0, y: 0, width: CGFloat(logo.width) * 40, height: CGFloat(logo.height) * 40))
+    return pixel[3] > 200
+}()
+
 /// Скруглённый квадрат Apple — суперэллипс, а не прямоугольник с дугами:
 /// у дуг заметно другой изгиб на большом размере.
 func squirclePath(in rect: CGRect, exponent: Double = 5) -> CGPath {
@@ -66,6 +77,16 @@ func renderIcon(side: Int) -> CGImage {
                        width: (1_024 - plateInset * 2) * scale,
                        height: (1_024 - plateInset * 2) * scale)
     let shape = squirclePath(in: plate)
+
+    if isFullBleed {
+        // Лицо иконки уже нарисовано — остаётся обрезать его по форме плитки.
+        ctx.saveGState()
+        ctx.addPath(shape)
+        ctx.clip()
+        ctx.draw(logo, in: plate)
+        ctx.restoreGState()
+        return ctx.makeImage()!
+    }
 
     // Подложка почти белая с еле заметным переходом: знак тёмный, и на тёмном
     // доке без подложки он бы просто исчез.

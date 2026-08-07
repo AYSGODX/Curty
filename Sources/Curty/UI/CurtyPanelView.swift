@@ -170,21 +170,24 @@ struct PanelRootView: View {
 
     private var toolRail: some View {
         VStack(spacing: CurtyTheme.railButtonSpacing) {
-            // Тот же знак, что в доке, на фирменной оранжевой плитке. Запасной
-            // вариант на случай, если файла в бандле не окажется, — прежний
-            // символ, лишь бы место не пустовало.
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(CurtyTheme.accent.gradient)
+            // Знак уже нарисован вместе с фоном, поэтому подложка не нужна —
+            // достаточно обрезать его по форме плитки. Запасной вариант на
+            // случай, если файла в бандле не окажется: прежний символ на
+            // акцентной плитке, лишь бы место не пустовало.
+            Group {
                 if let logo = CurtyTheme.logo {
                     Image(nsImage: logo)
                         .resizable()
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
+                        .scaledToFill()
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
-                    Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(CurtyTheme.accent.gradient)
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
                 }
             }
             .frame(width: 36, height: 36)
