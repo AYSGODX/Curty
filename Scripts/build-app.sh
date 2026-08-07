@@ -49,8 +49,9 @@ fi
 # ("Invalid Iconset") — a hard stop over something entirely static. Use
 # Scripts/generate-icon.swift to regenerate Resources/AppIcon.icns when the
 # artwork itself changes.
-# Тот же знак рисуется в шторке, поэтому исходник едет в бандл рядом с иконкой.
-cp "$ROOT/Resources/Logo.png" "$APP/Contents/Resources/Logo.png"
+# Тот же знак рисуется в шторке — туда едет уменьшенная копия, а не исходник
+# на тысячу пикселей: ужатый одним прыжком, он даёт рваный край.
+cp "$ROOT/Resources/LogoSmall.png" "$APP/Contents/Resources/LogoSmall.png"
 
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"

@@ -33,10 +33,11 @@ enum CurtyTheme {
     static let darkRail = Color(red: 0.095, green: 0.095, blue: 0.11)
     static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
 
-    /// Знак приложения — тот же файл, из которого собрана иконка в доке.
-    /// Читается один раз: панель перерисовывается часто.
+    /// Знак приложения, заранее уменьшенный до размера, близкого к экранному:
+    /// пересчёт с тысячи пикселей на лету рвал край. Читается один раз —
+    /// панель перерисовывается часто.
     static let logo: NSImage? = {
-        guard let url = Bundle.main.url(forResource: "Logo", withExtension: "png") else { return nil }
+        guard let url = Bundle.main.url(forResource: "LogoSmall", withExtension: "png") else { return nil }
         return NSImage(contentsOf: url)
     }()
 }

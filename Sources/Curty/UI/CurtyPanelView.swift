@@ -170,18 +170,12 @@ struct PanelRootView: View {
 
     private var toolRail: some View {
         VStack(spacing: CurtyTheme.railButtonSpacing) {
-            // Тот же знак, что в доке: светлая плитка со скруглением, знак
-            // внутри. Запасной вариант на случай, если файла в бандле не
-            // окажется, — прежний символ, лишь бы место не пустовало.
+            // Тот же знак, что в доке, на фирменной оранжевой плитке. Запасной
+            // вариант на случай, если файла в бандле не окажется, — прежний
+            // символ, лишь бы место не пустовало.
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [.white, Color(white: 0.92)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .fill(CurtyTheme.accent.gradient)
                 if let logo = CurtyTheme.logo {
                     Image(nsImage: logo)
                         .resizable()
@@ -190,7 +184,7 @@ struct PanelRootView: View {
                 } else {
                     Image(systemName: "shield.lefthalf.filled")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(CurtyTheme.darkBackground)
+                        .foregroundStyle(.white)
                 }
             }
             .frame(width: 36, height: 36)

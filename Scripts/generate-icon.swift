@@ -113,6 +113,30 @@ guard CGImageDestinationFinalize(destination) else {
 }
 print("готово: \(iconURL.path)")
 
+// Знак в шторке рисуется размером в двадцать с небольшим пунктов. Ужимать в них
+// исходник на тысячу пикселей — верный способ получить рваный край, поэтому
+// рядом кладётся заранее уменьшенная копия с честным пересчётом.
+let smallURL = logoURL.deletingLastPathComponent().appendingPathComponent("LogoSmall.png")
+let smallSide = 128
+let smallContext = CGContext(data: nil, width: smallSide, height: smallSide, bitsPerComponent: 8,
+                             bytesPerRow: 0, space: sRGB,
+                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+smallContext.interpolationQuality = .high
+let smallRatio = CGFloat(logo.width) / CGFloat(logo.height)
+let smallSize = smallRatio >= 1
+    ? CGSize(width: CGFloat(smallSide), height: CGFloat(smallSide) / smallRatio)
+    : CGSize(width: CGFloat(smallSide) * smallRatio, height: CGFloat(smallSide))
+smallContext.draw(logo, in: CGRect(x: (CGFloat(smallSide) - smallSize.width) / 2,
+                                   y: (CGFloat(smallSide) - smallSize.height) / 2,
+                                   width: smallSize.width, height: smallSize.height))
+if let smallImage = smallContext.makeImage(),
+   let smallOut = CGImageDestinationCreateWithURL(smallURL as CFURL,
+                                                  UTType.png.identifier as CFString, 1, nil) {
+    CGImageDestinationAddImage(smallOut, smallImage, nil)
+    CGImageDestinationFinalize(smallOut)
+    print("готово: \(smallURL.path)")
+}
+
 // --- Лист предпросмотра ------------------------------------------------------
 
 guard arguments.count >= 4 else { exit(0) }
