@@ -113,20 +113,23 @@ private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
         return candidates.first(where: { $0.snapshot.isPlaying })?.snapshot ?? candidates.first?.snapshot
     }
 
-    func perform(_ command: MediaCommand) throws {
-        let candidates = try collectCandidates()
-        guard let player = candidates.first(where: { $0.snapshot.isPlaying })?.player ?? candidates.first?.player else {
-            throw AdapterError.noSupportedPlayer
-        }
-        _ = try execute(player.commandScript(command))
+    /// Плеер известен из последнего снимка, поэтому команда стоит одного
+    /// скрипта. Раньше каждое нажатие сначала опрашивало оба плеера заново —
+    /// три обращения вместо одного, и все они могли повиснуть.
+    func perform(_ command: MediaCommand, on source: String) throws {
+        _ = try execute(try target(source).commandScript(command))
     }
 
-    func seek(to seconds: Double) throws {
-        let candidates = try collectCandidates()
-        guard let player = candidates.first(where: { $0.snapshot.isPlaying })?.player ?? candidates.first?.player else {
+    func seek(to seconds: Double, on source: String) throws {
+        _ = try execute(try target(source).seekScript(toSeconds: seconds))
+    }
+
+    private func target(_ source: String) throws -> PlayerKind {
+        guard let player = PlayerKind.allCases.first(where: { $0.displayName == source }),
+              isRunning(player) else {
             throw AdapterError.noSupportedPlayer
         }
-        _ = try execute(player.seekScript(toSeconds: seconds))
+        return player
     }
 
     // Sending the event is what makes macOS show the Automation consent
@@ -228,16 +231,16 @@ final class MediaStore: ObservableObject {
     @Published private(set) var needsAutomationPermission = false
     @Published var lastError: String?
 
-    /// A hung script must not be able to block the ones after it, so the queue
-    /// is concurrent. In practice at most one stuck call ever overlaps a live
-    /// one, because `beginRequest` still refuses a second request until the
-    /// first either answers or times out.
     private static let requestTimeout: TimeInterval = 6
 
     let artwork = ArtworkLoader()
 
     private let adapter = FixedAppleScriptMediaAdapter()
-    private let queue = DispatchQueue(label: "dev.curty.media", qos: .userInitiated, attributes: .concurrent)
+    /// Очередь последовательная: каждое обращение к плееру проходит через
+    /// beginRequest, поэтому одновременных вызовов не бывает. Конкурентная
+    /// очередь позволяла нажатиям «следующий трек» копить заблокированные
+    /// потоки, пока плеер молчит, — и в пределе выносила пул GCD целиком.
+    private let queue = DispatchQueue(label: "dev.curty.media", qos: .userInitiated)
     private var timer: Timer?
     private var isRefreshing = false
     private var requestStartedAt: TimeInterval = 0
@@ -358,14 +361,18 @@ final class MediaStore: ObservableObject {
         }
     }
 
+    // Команды проходят через тот же beginRequest, что и опрос. Раньше они шли в
+    // очередь напрямую, и каждое нажатие по молчащему плееру добавляло ещё один
+    // застрявший вызов — ровно тот отказ, от которого beginRequest и защищает.
     func perform(_ command: MediaCommand) {
-        guard isEnabled else { return }
+        guard isEnabled, let source = snapshot?.source, beginRequest() else { return }
         let adapter = self.adapter
         let requestGeneration = generation
         queue.async { [weak self] in
-            let result = Result { try adapter.perform(command) }
+            let result = Result { try adapter.perform(command, on: source) }
             Task { @MainActor in
                 guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                self.isRefreshing = false
                 switch result {
                 case .success:
                     self.lastError = nil
@@ -378,16 +385,18 @@ final class MediaStore: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        guard isEnabled, let current = snapshot, current.duration > 0 else { return }
+        guard isEnabled, let current = snapshot, current.duration > 0, beginRequest() else { return }
         let target = MediaSeekPolicy.clamp(seconds, duration: current.duration)
         // Move the scrubber right away; the next poll confirms it a second later.
         snapshot?.position = target
         let adapter = self.adapter
+        let source = current.source
         let requestGeneration = generation
         queue.async { [weak self] in
-            let result = Result { try adapter.seek(to: target) }
+            let result = Result { try adapter.seek(to: target, on: source) }
             Task { @MainActor in
                 guard let self, self.generation == requestGeneration, self.isEnabled else { return }
+                self.isRefreshing = false
                 switch result {
                 case .success:
                     self.lastError = nil

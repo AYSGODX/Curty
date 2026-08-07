@@ -5,6 +5,9 @@ struct CalendarView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            if let error = store.lastError {
+                CurtyErrorRow(message: error) { store.lastError = nil }
+            }
             CurtyCard {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {

@@ -8,14 +8,20 @@ struct ShelfItem: Identifiable, Equatable {
 
     let id: UUID
     let location: Location
-    let url: URL
+    /// nil, пока файл недоступен: том не смонтирован, файл выгружен из iCloud
+    /// или лежит на отключённой шаре. Запись при этом остаётся на полке —
+    /// выбрасывать её вправе только пользователь.
+    let url: URL?
+    let name: String
     let addedAt: Date
 
-    var name: String { url.lastPathComponent }
+    var isAvailable: Bool { url != nil }
 
     var isPotentiallyExecutable: Bool {
         let extensions = ["app", "pkg", "command", "workflow", "scpt", "dmg"]
-        return extensions.contains(url.pathExtension.lowercased()) || FileManager.default.isExecutableFile(atPath: url.path)
+        if extensions.contains((name as NSString).pathExtension.lowercased()) { return true }
+        guard let url else { return false }
+        return FileManager.default.isExecutableFile(atPath: url.path)
     }
 }
 
@@ -23,6 +29,9 @@ private struct StoredShelfItem: Codable {
     let id: UUID
     let location: ShelfItem.Location
     let addedAt: Date
+    /// Появилось позже: без имени недоступный элемент нечем показать. Optional,
+    /// чтобы уже сохранённые полки читались без миграции.
+    var name: String?
 }
 
 @MainActor
@@ -34,9 +43,23 @@ final class ShelfStore: ObservableObject {
         url: ApplicationPaths.supportDirectory.appendingPathComponent("shelf.json")
     )
 
+    /// Загрузка ничего не удаляет и по умолчанию ничего не пишет. Раньше здесь
+    /// отсеивались неразрешившиеся закладки, и результат отсева тут же
+    /// сохранялся — отключённый диск стоил записи навсегда.
     func load() {
-        items = store.load(default: []).compactMap(resolve)
-        persist()
+        let result = store.load(default: [])
+        var refreshedBookmarks = false
+        items = result.value.map { stored in
+            let resolved = resolve(stored)
+            if resolved.location != stored.location { refreshedBookmarks = true }
+            return resolved
+        }
+
+        if let backup = result.corruptedBackup {
+            lastError = "Список полки был повреждён. Прежний файл сохранён: \(backup.lastPathComponent)"
+        }
+        // Единственная причина писать при загрузке — обновлённые закладки.
+        if refreshedBookmarks { persist() }
     }
 
     func addUserSelectedFiles(_ urls: [URL]) {
@@ -48,9 +71,16 @@ final class ShelfStore: ObservableObject {
                     relativeTo: nil
                 )
                 items.insert(
-                    ShelfItem(id: UUID(), location: .securityScopedBookmark(bookmark), url: url, addedAt: Date()),
+                    ShelfItem(
+                        id: UUID(),
+                        location: .securityScopedBookmark(bookmark),
+                        url: url,
+                        name: url.lastPathComponent,
+                        addedAt: Date()
+                    ),
                     at: 0
                 )
+                lastError = nil
             } catch {
                 // Локализованный текст один и тот же для десятка разных причин,
                 // поэтому домен и код показываем прямо в интерфейсе: без них
@@ -65,7 +95,16 @@ final class ShelfStore: ObservableObject {
 
     func addOwnedFile(_ url: URL) {
         guard isInsideVault(url), !items.contains(where: { $0.url == url }) else { return }
-        items.insert(ShelfItem(id: UUID(), location: .ownedFile(url.path), url: url, addedAt: Date()), at: 0)
+        items.insert(
+            ShelfItem(
+                id: UUID(),
+                location: .ownedFile(url.path),
+                url: url,
+                name: url.lastPathComponent,
+                addedAt: Date()
+            ),
+            at: 0
+        )
         persist()
     }
 
@@ -85,11 +124,16 @@ final class ShelfStore: ObservableObject {
 
     @discardableResult
     func open(_ item: ShelfItem, allowingExecutables: Bool = false) -> Bool {
+        guard item.isAvailable else {
+            lastError = "«\(item.name)» сейчас недоступен."
+            return false
+        }
         guard allowingExecutables || !item.isPotentiallyExecutable else {
             lastError = "Исполняемые файлы открываются только после отдельного подтверждения."
             return false
         }
-        return withAccess(to: item) { NSWorkspace.shared.open($0) }
+        lastError = nil
+        return withAccess(to: item) { NSWorkspace.shared.open($0) } ?? false
     }
 
     /// Puts the file itself on the pasteboard, so pasting in Finder produces a
@@ -100,12 +144,19 @@ final class ShelfStore: ObservableObject {
         }
     }
 
-    private func resolve(_ stored: StoredShelfItem) -> ShelfItem? {
+    private func resolve(_ stored: StoredShelfItem) -> ShelfItem {
         switch stored.location {
         case .ownedFile(let path):
             let url = URL(fileURLWithPath: path)
-            guard isInsideVault(url), FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return ShelfItem(id: stored.id, location: stored.location, url: url, addedAt: stored.addedAt)
+            let exists = isInsideVault(url) && FileManager.default.fileExists(atPath: url.path)
+            return ShelfItem(
+                id: stored.id,
+                location: stored.location,
+                url: exists ? url : nil,
+                name: stored.name ?? url.lastPathComponent,
+                addedAt: stored.addedAt
+            )
+
         case .securityScopedBookmark(let data):
             var isStale = false
             guard let url = try? URL(
@@ -113,31 +164,65 @@ final class ShelfStore: ObservableObject {
                 options: [.withSecurityScope, .withoutUI],
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
-            ), !isStale else { return nil }
+            ) else {
+                return unavailable(stored)
+            }
 
-            // Whether a file outside the container exists can only be answered
-            // with the scope open. Asking without it always says "no", which
-            // quietly emptied the shelf on every launch.
+            // Существование файла вне контейнера можно проверить только с
+            // открытым доступом: без него ответ всегда «нет».
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return ShelfItem(id: stored.id, location: stored.location, url: url, addedAt: stored.addedAt)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                return unavailable(stored, name: url.lastPathComponent)
+            }
+
+            // isStale по контракту Apple означает «ссылка ещё верна, закладку
+            // пересоздай», а не «выбрасывай запись».
+            var location = stored.location
+            if isStale, let refreshed = try? url.bookmarkData(
+                options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                includingResourceValuesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
+                relativeTo: nil
+            ) {
+                location = .securityScopedBookmark(refreshed)
+            }
+
+            return ShelfItem(
+                id: stored.id,
+                location: location,
+                url: url,
+                name: url.lastPathComponent,
+                addedAt: stored.addedAt
+            )
         }
+    }
+
+    private func unavailable(_ stored: StoredShelfItem, name: String? = nil) -> ShelfItem {
+        ShelfItem(
+            id: stored.id,
+            location: stored.location,
+            url: nil,
+            name: name ?? stored.name ?? "Недоступный файл",
+            addedAt: stored.addedAt
+        )
     }
 
     private func persist() {
         do {
-            try store.save(items.map { StoredShelfItem(id: $0.id, location: $0.location, addedAt: $0.addedAt) })
+            try store.save(items.map {
+                StoredShelfItem(id: $0.id, location: $0.location, addedAt: $0.addedAt, name: $0.name)
+            })
         } catch {
-            lastError = error.localizedDescription
+            lastError = "Не удалось сохранить список полки: \(error.localizedDescription)"
         }
     }
 
-    private func withAccess<Result>(to item: ShelfItem, perform: (URL) -> Result) -> Result {
-        guard case .securityScopedBookmark = item.location else { return perform(item.url) }
-        let access = item.url.startAccessingSecurityScopedResource()
-        defer { if access { item.url.stopAccessingSecurityScopedResource() } }
-        return perform(item.url)
+    private func withAccess<Result>(to item: ShelfItem, perform: (URL) -> Result) -> Result? {
+        guard let url = item.url else { return nil }
+        guard case .securityScopedBookmark = item.location else { return perform(url) }
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        return perform(url)
     }
 
     private func isInsideVault(_ url: URL) -> Bool {

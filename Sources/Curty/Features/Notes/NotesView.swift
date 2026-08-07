@@ -8,6 +8,22 @@ struct NotesView: View {
     }
 
     var body: some View {
+        VStack(spacing: 8) {
+            content
+
+            if let pending = store.pendingDeletion {
+                CurtyUndoBar(message: "Заметка удалена") { store.undoDeletion() }
+                    .id(pending.item.id)
+            }
+
+            if let error = store.lastError {
+                CurtyErrorRow(message: error) { store.lastError = nil }
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: store.pendingDeletion)
+    }
+
+    private var content: some View {
         HStack(spacing: 10) {
             VStack(spacing: 8) {
                 Button { store.add() } label: {

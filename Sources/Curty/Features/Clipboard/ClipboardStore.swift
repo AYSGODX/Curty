@@ -175,6 +175,7 @@ final class ClipboardStore: ObservableObject {
         do {
             let url = try ClipboardVault.save(data)
             onImageSaved?(url)
+            lastError = nil
         } catch {
             lastError = error.localizedDescription
         }

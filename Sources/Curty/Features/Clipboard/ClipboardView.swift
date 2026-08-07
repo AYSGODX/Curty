@@ -130,13 +130,7 @@ struct ClipboardView: View {
             }
 
             if let error = store.lastError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(error).lineLimit(1)
-                    Spacer()
-                }
-                .font(.caption)
-                .foregroundStyle(.red)
+                CurtyErrorRow(message: error) { store.lastError = nil }
             }
         }
     }

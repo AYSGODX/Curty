@@ -136,6 +136,52 @@ struct CurtySwitch: View {
     }
 }
 
+/// Ошибку записи некуда деть, кроме экрана: без неё пользователь узнаёт о
+/// потерянной заметке через часы, когда восстанавливать уже нечего.
+struct CurtyErrorRow: View {
+    let message: String
+    var onDismiss: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(message)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            if let onDismiss {
+                CurtyRowButton(systemName: "xmark", title: "Скрыть сообщение", size: 20, glyphSize: 10, action: onDismiss)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.red)
+    }
+}
+
+/// Окно отмены удаления. Живёт несколько секунд и исчезает само.
+struct CurtyUndoBar: View {
+    let message: String
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.uturn.backward")
+                .foregroundStyle(CurtyTheme.accent)
+            Text(message)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Button("Отменить", action: onUndo)
+                .buttonStyle(CurtySecondaryButtonStyle())
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+        .transition(.opacity)
+    }
+}
+
 /// Icon-only action. Bare glyphs give no sign they are clickable, so this lights
 /// up under the pointer and carries a tooltip explaining itself.
 struct CurtyRowButton: View {

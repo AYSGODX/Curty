@@ -112,6 +112,7 @@ final class CalendarStore: ObservableObject {
         guard authorization == .granted else { return }
         let start = Date()
         let end = start.addingTimeInterval(horizon.duration)
+        lastError = nil
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nil)
         meetings = eventStore.events(matching: predicate)
             .filter { !$0.isAllDay && $0.status != .canceled }

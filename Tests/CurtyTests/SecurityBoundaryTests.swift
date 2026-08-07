@@ -44,6 +44,66 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertTrue(ClipboardPolicy.acceptsImage(makePNG(width: 2, height: 2)))
     }
 
+    func testCorruptedFileIsSetAsideInsteadOfDiscarded() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CurtyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appendingPathComponent("notes.json")
+        try Data("{ это не json".utf8).write(to: url)
+
+        let store = AtomicJSONStore<[String]>(url: url)
+        let result = store.load(default: ["запасное"])
+
+        XCTAssertEqual(result.value, ["запасное"])
+        // Главное: испорченный файл никуда не делся, его можно разобрать руками.
+        let backup = try XCTUnwrap(result.corruptedBackup)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+        XCTAssertEqual(try String(contentsOf: backup, encoding: .utf8), "{ это не json")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testUndoWindowIsLongEnoughToNotice() {
+        // Четыре секунды: успеть заметить промах, но не держать полосу на экране.
+        XCTAssertEqual(PendingDeletion<String>.window, .seconds(4))
+    }
+
+    @MainActor
+    func testDeletedNoteComesBackToItsOwnPlace() {
+        let store = NoteStore()
+        store.add()
+        store.add()
+        store.add()
+        let middle = store.items[1]
+
+        store.remove(middle)
+        XCTAssertEqual(store.items.count, 2)
+        XCTAssertEqual(store.pendingDeletion?.item, middle)
+
+        store.undoDeletion()
+        XCTAssertEqual(store.items.count, 3)
+        XCTAssertEqual(store.items[1], middle, "заметка должна вернуться на своё место, а не в начало")
+        XCTAssertNil(store.pendingDeletion)
+    }
+
+    @MainActor
+    func testDeletedSnippetComesBackToItsOwnPlace() {
+        let store = SnippetStore()
+        store.add(title: "первый", body: "1")
+        store.add(title: "второй", body: "2")
+        store.add(title: "третий", body: "3")
+        let middle = store.items[1]
+
+        store.remove(middle)
+        XCTAssertEqual(store.items.count, 2)
+
+        store.undoDeletion()
+        XCTAssertEqual(store.items.count, 3)
+        XCTAssertEqual(store.items[1], middle)
+        XCTAssertNil(store.pendingDeletion)
+    }
+
     func testAtomicJSONStoreRoundTrip() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CurtyTests-\(UUID().uuidString)", isDirectory: true)
@@ -53,7 +113,7 @@ final class SecurityBoundaryTests: XCTestCase {
         let url = directory.appendingPathComponent("test.json")
         let store = AtomicJSONStore<[String]>(url: url)
         try store.save(["локально", "безопасно"])
-        XCTAssertEqual(store.load(default: []), ["локально", "безопасно"])
+        XCTAssertEqual(store.load(default: []).value, ["локально", "безопасно"])
 
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let permissions = attributes[.posixPermissions] as? NSNumber

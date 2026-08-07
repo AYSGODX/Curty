@@ -5,6 +5,22 @@ struct SnippetsView: View {
     @State private var draft: SnippetDraft?
 
     var body: some View {
+        VStack(spacing: 8) {
+            content
+
+            if let pending = store.pendingDeletion {
+                CurtyUndoBar(message: "Сниппет удалён") { store.undoDeletion() }
+                    .id(pending.item.id)
+            }
+
+            if let error = store.lastError {
+                CurtyErrorRow(message: error) { store.lastError = nil }
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: store.pendingDeletion)
+    }
+
+    private var content: some View {
         VStack(spacing: 10) {
             HStack {
                 TextField("Поиск сниппетов", text: $store.query)

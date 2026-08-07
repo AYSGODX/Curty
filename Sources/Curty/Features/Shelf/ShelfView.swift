@@ -58,91 +58,14 @@ struct ShelfView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(store.items) { item in
-                            HStack(spacing: 10) {
-                                Image(systemName: item.isPotentiallyExecutable ? "exclamationmark.shield" : "doc")
-                                    .foregroundStyle(item.isPotentiallyExecutable ? Color.orange : CurtyTheme.accent)
-                                Text(item.name)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .lineLimit(1)
-                                Spacer(minLength: 8)
-                                // Fixed width, so the name column always ends at
-                                // the same place. Opening moved to a double click
-                                // on the row, which left room to make the rest
-                                // big enough not to misclick.
-                                // Copy sits next to last so it and the cross land
-                                // on the same spots as in Буфер, where those are
-                                // the only two actions.
-                                HStack(spacing: CurtyTheme.rowActionSpacing) {
-                                    CurtyRowButton(
-                                        systemName: "magnifyingglass",
-                                        title: "Показать в Finder",
-                                        size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13
-                                    ) { revealInFinder(item) }
-                                    CurtyRowButton(
-                                        systemName: "doc.on.doc",
-                                        title: "Копировать файл",
-                                        size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13,
-                                        confirmsWith: "checkmark"
-                                    ) { store.copy(item) }
-
-                                    Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
-
-                                    CurtyRowButton(
-                                        systemName: "xmark",
-                                        title: "Убрать с полки",
-                                        isDestructive: true,
-                                        size: CurtyTheme.rowActionSize,
-                                        glyphSize: 13
-                                    ) { store.remove(item) }
-                                }
-                                .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(rowBackground(for: item), in: RoundedRectangle(cornerRadius: 11))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 11)
-                                    .strokeBorder(
-                                        selectedID == item.id ? CurtyTheme.accent.opacity(0.55) : .clear
-                                    )
-                            )
-                            .contentShape(Rectangle())
-                            // Double click opens, single click only selects — the
-                            // selection is what the space bar previews.
-                            .onTapGesture(count: 2) { requestOpen(item) }
-                            // Selection runs as a simultaneous gesture: as a
-                            // plain single tap it would have to wait out the
-                            // double-click interval before it could know it was
-                            // not the first half of one, and the row lit up only
-                            // after that pause.
-                            .simultaneousGesture(
-                                TapGesture().onEnded {
-                                    selectedID = item.id
-                                    isListFocused = true
-                                }
-                            )
-                            // Drag the row straight into Finder or another app.
-                            // The receiver reads the file with its own access,
-                            // so the bookmark scope does not have to stay open.
-                            .onDrag {
-                                selectedID = item.id
-                                return NSItemProvider(object: item.url as NSURL)
-                            }
+                            row(for: item)
                         }
                     }
                 }
             }
 
             if let error = store.lastError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(error).lineLimit(2)
-                    Spacer()
-                }
-                .font(.caption)
-                .foregroundStyle(.red)
+                CurtyErrorRow(message: error) { store.lastError = nil }
             }
         }
         .confirmationDialog(
@@ -209,10 +132,108 @@ struct ShelfView: View {
         }
     }
 
+    /// Недоступная запись остаётся на полке приглушённой: диск подключат
+    /// обратно — и она снова заработает. Убрать её может только пользователь.
+    @ViewBuilder
+    private func row(for item: ShelfItem) -> some View {
+        let isSelected = selectedID == item.id
+
+        HStack(spacing: 10) {
+            Image(systemName: rowIcon(for: item))
+                .foregroundStyle(rowIconTint(for: item))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                if !item.isAvailable {
+                    Text("Файл сейчас недоступен")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 8)
+            rowActions(for: item)
+        }
+        .opacity(item.isAvailable ? 1 : 0.55)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(rowBackground(for: item), in: RoundedRectangle(cornerRadius: 11))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11)
+                .strokeBorder(isSelected ? CurtyTheme.accent.opacity(0.55) : .clear)
+        )
+        .contentShape(Rectangle())
+        // Double click opens, single click only selects — the selection is
+        // what the space bar previews.
+        .onTapGesture(count: 2) { requestOpen(item) }
+        // Selection runs as a simultaneous gesture: as a plain single tap it
+        // would have to wait out the double-click interval before it could know
+        // it was not the first half of one.
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                selectedID = item.id
+                isListFocused = true
+            }
+        )
+        .onDrag {
+            selectedID = item.id
+            // Перетаскивать нечего, пока файл недоступен: пустой провайдер
+            // честнее, чем ссылка в никуда.
+            guard let url = item.url else { return NSItemProvider() }
+            return NSItemProvider(object: url as NSURL)
+        }
+    }
+
+    private func rowIcon(for item: ShelfItem) -> String {
+        if !item.isAvailable { return "questionmark.folder" }
+        return item.isPotentiallyExecutable ? "exclamationmark.shield" : "doc"
+    }
+
+    private func rowIconTint(for item: ShelfItem) -> Color {
+        if !item.isAvailable { return .secondary }
+        return item.isPotentiallyExecutable ? .orange : CurtyTheme.accent
+    }
+
+    @ViewBuilder
+    private func rowActions(for item: ShelfItem) -> some View {
+        HStack(spacing: CurtyTheme.rowActionSpacing) {
+            CurtyRowButton(
+                systemName: "magnifyingglass",
+                title: "Показать в Finder",
+                size: CurtyTheme.rowActionSize,
+                glyphSize: 13,
+                isEnabled: item.isAvailable
+            ) { revealInFinder(item) }
+
+            CurtyRowButton(
+                systemName: "doc.on.doc",
+                title: "Копировать файл",
+                size: CurtyTheme.rowActionSize,
+                glyphSize: 13,
+                isEnabled: item.isAvailable,
+                confirmsWith: "checkmark"
+            ) { store.copy(item) }
+
+            Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
+
+            CurtyRowButton(
+                systemName: "xmark",
+                title: "Убрать с полки",
+                isDestructive: true,
+                size: CurtyTheme.rowActionSize,
+                glyphSize: 13
+            ) { store.remove(item) }
+        }
+        .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
+    }
+
     private func quickLook(_ item: ShelfItem) {
+        guard let url = item.url else { return }
         var isSecurityScoped = false
         if case .securityScopedBookmark = item.location { isSecurityScoped = true }
-        QuickLookCoordinator.shared.toggle(item.url, isSecurityScoped: isSecurityScoped)
+        QuickLookCoordinator.shared.toggle(url, isSecurityScoped: isSecurityScoped)
     }
 
     private func rowBackground(for item: ShelfItem) -> Color {

@@ -13,10 +13,12 @@ final class SnippetStore: ObservableObject {
     @Published private(set) var items: [Snippet] = []
     @Published var query = ""
     @Published var lastError: String?
+    @Published private(set) var pendingDeletion: PendingDeletion<Snippet>?
 
     private let store = AtomicJSONStore<[Snippet]>(
         url: ApplicationPaths.supportDirectory.appendingPathComponent("snippets.json")
     )
+    private var undoWindow: Task<Void, Never>?
 
     var filteredItems: [Snippet] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -28,7 +30,13 @@ final class SnippetStore: ObservableObject {
         }
     }
 
-    func load() { items = store.load(default: []) }
+    func load() {
+        let result = store.load(default: [])
+        items = result.value
+        if let backup = result.corruptedBackup {
+            lastError = "Файл сниппетов был повреждён. Прежний сохранён: \(backup.lastPathComponent)"
+        }
+    }
 
     func add(title: String, body: String, tags: [String] = []) {
         let value = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,7 +64,17 @@ final class SnippetStore: ObservableObject {
     }
 
     func remove(_ snippet: Snippet) {
-        items.removeAll { $0.id == snippet.id }
+        guard let index = items.firstIndex(where: { $0.id == snippet.id }) else { return }
+        items.remove(at: index)
+        persist()
+        openUndoWindow(PendingDeletion(item: snippet, index: index))
+    }
+
+    func undoDeletion() {
+        guard let pending = pendingDeletion else { return }
+        undoWindow?.cancel()
+        pendingDeletion = nil
+        items.insert(pending.item, at: min(pending.index, items.count))
         persist()
     }
 
@@ -67,11 +85,28 @@ final class SnippetStore: ObservableObject {
     }
 
     func clear() {
+        undoWindow?.cancel()
+        pendingDeletion = nil
         items.removeAll()
         persist()
     }
 
+    private func openUndoWindow(_ pending: PendingDeletion<Snippet>) {
+        undoWindow?.cancel()
+        pendingDeletion = pending
+        undoWindow = Task { [weak self] in
+            try? await Task.sleep(for: PendingDeletion<Snippet>.window)
+            guard !Task.isCancelled else { return }
+            self?.pendingDeletion = nil
+        }
+    }
+
     private func persist() {
-        do { try store.save(items) } catch { lastError = error.localizedDescription }
+        do {
+            try store.save(items)
+            lastError = nil
+        } catch {
+            lastError = "Не удалось сохранить сниппеты: \(error.localizedDescription)"
+        }
     }
 }
