@@ -116,6 +116,15 @@ final class CalendarStore: ObservableObject {
         }
     }
 
+    /// Список — снимок на момент загрузки, а время идёт: встреча, которая
+    /// закончилась пять минут назад, продолжала висеть первой строкой. Отбор
+    /// вынесен отдельно, чтобы вьюха могла пересчитывать его по часам, не
+    /// трогая хранилище. Идущая сейчас встреча остаётся: она не прошедшая, и
+    /// ссылка на неё нужна именно в этот момент.
+    static func upcoming(_ meetings: [MeetingSummary], now: Date) -> [MeetingSummary] {
+        meetings.filter { $0.end > now }
+    }
+
     func reload() {
         guard authorization == .granted else { return }
         let start = Date()

@@ -143,6 +143,16 @@ final class AppModel: ObservableObject {
             .sink { [weak media] visible in media?.setPanelVisible(visible) }
             .store(in: &cancellables)
 
+        // Раскрытие шторки — единственный момент, когда точно известно, что на
+        // список сейчас будут смотреть. Без этого он оставался таким, каким
+        // его собрали при переходе на вкладку, хотя с тех пор прошли часы и
+        // система успела дотянуть новые события из Google.
+        $isPanelOpen
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in self?.calendar.refreshAuthorization() }
+            .store(in: &cancellables)
+
         clipboard.onImageSaved = { [weak shelf] url in shelf?.addOwnedFile(url) }
         calendar.onPermissionPromptChange = { [weak self] isPresenting in
             self?.isPresentingDialog = isPresenting

@@ -103,6 +103,33 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertNil(store.pendingDeletion)
     }
 
+    @MainActor
+    func testCalendarShowsOnlyWhatIsStillAhead() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func meeting(_ id: String, from: TimeInterval, to: TimeInterval) -> MeetingSummary {
+            MeetingSummary(
+                id: id,
+                title: id,
+                start: now.addingTimeInterval(from),
+                end: now.addingTimeInterval(to),
+                calendarName: "тест",
+                link: nil
+            )
+        }
+
+        let visible = CalendarStore.upcoming(
+            [
+                meeting("прошедшая", from: -7_200, to: -3_600),
+                meeting("идёт сейчас", from: -600, to: 1_800),
+                meeting("впереди", from: 3_600, to: 7_200),
+            ],
+            now: now
+        )
+
+        // Идущая встреча не прошедшая: ссылка на неё нужна именно сейчас.
+        XCTAssertEqual(visible.map(\.id), ["идёт сейчас", "впереди"])
+    }
+
     func testUpdateIsOfferedOnlyForNewerRemoteCommits() {
         let older = Date(timeIntervalSince1970: 1_000)
         let newer = Date(timeIntervalSince1970: 2_000)

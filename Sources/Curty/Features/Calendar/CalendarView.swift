@@ -38,74 +38,86 @@ struct CalendarView: View {
                     action: store.openPrivacySettings
                 )
             case .granted:
-                if store.meetings.isEmpty {
-                    CurtyCard {
-                        VStack(spacing: 8) {
-                            Image(systemName: "calendar.badge.checkmark")
-                                .font(.system(size: 26, weight: .light))
-                                .foregroundStyle(CurtyTheme.success)
-                            Text("Ближайших встреч нет")
-                                .font(.system(size: 13, weight: .medium))
-                            Text(store.horizon.emptyDetail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                    }
+                // Пересчёт по часам: пока панель открыта, закончившиеся встречи
+                // должны уходить из списка сами.
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    granted(now: context.date)
+                }
+            }
+        }
+    }
 
-                    // Пустой список читается как «календарь не работает», хотя
-                    // чаще всего нужная учётная запись просто не подключена к
-                    // системе. Curty берёт события из всех календарей сразу.
-                    CurtyCard {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Не хватает календаря?")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Curty показывает все календари, подключённые к системному «Календарю» — Google, Exchange, iCloud. Отдельный вход в Curty не нужен: аккаунт добавляется один раз в настройках системы.")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Button("Учётные записи интернета") {
-                                store.openAccountSettings()
-                                onHandOff()
-                            }
-                            .buttonStyle(CurtySecondaryButtonStyle())
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private func granted(now: Date) -> some View {
+        let meetings = CalendarStore.upcoming(store.meetings, now: now)
+        VStack(spacing: 10) {
+            if meetings.isEmpty {
+                CurtyCard {
+                    VStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.checkmark")
+                            .font(.system(size: 26, weight: .light))
+                            .foregroundStyle(CurtyTheme.success)
+                        Text("Ближайших встреч нет")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(store.horizon.emptyDetail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(store.meetings) { meeting in
-                                HStack(spacing: 10) {
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(meeting.start, style: .time)
-                                            .font(.caption.monospacedDigit())
-                                            .foregroundStyle(CurtyTheme.accent)
-                                        // In week mode the time alone is ambiguous.
-                                        if !Calendar.current.isDateInToday(meeting.start) {
-                                            Text(meeting.start, format: .dateTime.weekday(.abbreviated).day())
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .frame(width: 54, alignment: .leading)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(meeting.title)
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .lineLimit(1)
-                                        Text(meeting.provider ?? meeting.calendarName)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+                }
+
+                // Пустой список читается как «календарь не работает», хотя чаще
+                // всего нужная учётная запись просто не подключена к системе.
+                // Curty берёт события из всех календарей сразу.
+                CurtyCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Не хватает календаря?")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Curty показывает все календари, подключённые к системному «Календарю» — Google, Exchange, iCloud. Отдельный вход в Curty не нужен: аккаунт добавляется один раз в настройках системы.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Учётные записи интернета") {
+                            store.openAccountSettings()
+                            onHandOff()
+                        }
+                        .buttonStyle(CurtySecondaryButtonStyle())
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(meetings) { meeting in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(meeting.start, style: .time)
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(CurtyTheme.accent)
+                                    // In week mode the time alone is ambiguous.
+                                    if !Calendar.current.isDateInToday(meeting.start) {
+                                        Text(meeting.start, format: .dateTime.weekday(.abbreviated).day())
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
-                                    Spacer()
-                                    if meeting.link != nil {
-                                        Button("Войти") { store.join(meeting) }
-                                            .buttonStyle(CurtySecondaryButtonStyle())
-                                    }
                                 }
-                                .padding(9)
-                                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                                .frame(width: 54, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(meeting.title)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .lineLimit(1)
+                                    Text(meeting.provider ?? meeting.calendarName)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if meeting.link != nil {
+                                    Button("Войти") { store.join(meeting) }
+                                        .buttonStyle(CurtySecondaryButtonStyle())
+                                }
                             }
+                            .padding(9)
+                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
                         }
                     }
                 }
