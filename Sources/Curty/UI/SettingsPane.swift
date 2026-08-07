@@ -150,7 +150,12 @@ struct SettingsPane: View {
         HStack(spacing: 8) {
             // Кнопка не гаснет совсем, а тускнеет: исчезающий элемент читается
             // как поломка, а выключенный — как «пока нечего ставить».
-            Button("Обновить") { updates.startUpdate() }
+            Button("Обновить") {
+                // Шторка висит поверх всего, включая окно Терминала и любые
+                // системные диалоги: оставить её открытой значит спрятать от
+                // человека всё, что происходит дальше.
+                if updates.startUpdate() { model.requestPanelClose() }
+            }
                 .buttonStyle(CurtyProminentButtonStyle())
                 .disabled(!updates.canInstallUpdate)
 

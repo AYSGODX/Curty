@@ -63,6 +63,15 @@ if ! scan 'approvedHosts' "$ARTWORK_FILE"; then
     FAILURES=1
 fi
 
+# Запуск чего бы то ни было вне песочницы — самая сильная возможность в
+# приложении. Ей место ровно в одном файле, и появление её где-то ещё должно
+# останавливать сборку.
+LAUNCH_USERS="$(grep -rlE 'NSUserUnixTask|NSUserScriptTask|Process\(\)|posix_spawn|NSTask' "$ROOT/Sources" 2>/dev/null || true)"
+if [ -n "$LAUNCH_USERS" ] && [ "$LAUNCH_USERS" != "$UPDATE_FILE" ]; then
+    echo "Запуск процессов допустим только в UpdateChecker.swift, найден в: $LAUNCH_USERS" >&2
+    FAILURES=1
+fi
+
 # Адрес проверки обновлений должен оставаться константой: иначе запрос уедет
 # туда, куда его попросит любой ответ сервера.
 if ! scan 'apiHost = "api.github.com"' "$UPDATE_FILE"; then

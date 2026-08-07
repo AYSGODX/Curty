@@ -98,6 +98,32 @@ if ! pgrep -f "$APP_NAME/Contents/MacOS/Curty" >/dev/null 2>&1; then
     exit 1
 fi
 
+# --- Запускатель обновления -------------------------------------------------
+
+# Кнопка «Обновить» в настройках запускает файл отсюда. Это штатная папка для
+# скриптов песочных приложений: она лежит ВНЕ контейнера, и запуск из неё идёт
+# вне песочницы. Внутрь контейнера класть нельзя — macOS помечает его целиком
+# карантином, и Gatekeeper объявляет любой запуск оттуда повреждённым.
+# Путь обязан совпадать с UpdatePolicy.launcherName и способом, которым
+# приложение спрашивает .applicationScriptsDirectory.
+SCRIPTS_DIRECTORY="$HOME/Library/Application Scripts/dev.curty.app"
+if mkdir -p "$SCRIPTS_DIRECTORY" 2>/dev/null; then
+    LAUNCHER="$SCRIPTS_DIRECTORY/update.sh"
+    # Здесь только переход: сама логика обновления живёт в репозитории, её
+    # видно, её можно прочитать, и она приезжает вместе с git pull. Терминал
+    # нужен, чтобы работа пережила перезапуск Curty и была видна человеку.
+    printf '#!/bin/bash\nexec /usr/bin/open -a Terminal %q/Scripts/update.command\n' "$ROOT" > "$LAUNCHER"
+    chmod 700 "$LAUNCHER"
+    # Карантин на самой папке достаётся ей по наследству и мешает запуску.
+    # Это обычный каталог в Library, а не контейнер, — снимать его безопасно.
+    xattr -cr "$SCRIPTS_DIRECTORY" 2>/dev/null || true
+    # Остаток предыдущей попытки: запускатель какое-то время жил в контейнере,
+    # где его блокировал Gatekeeper.
+    rm -f "$HOME/Library/Containers/dev.curty.app/Data/Library/Application Support/curty/update.command"
+else
+    echo "warning: не удалось подготовить кнопку обновления, обновляйтесь через git pull && Scripts/install.sh" >&2
+fi
+
 echo
 echo "Готово: $TARGET"
 echo "Иконка щита появится в строке меню — наведите курсор на вырез экрана."

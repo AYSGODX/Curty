@@ -36,38 +36,20 @@ enum UpdatePolicy {
         return remoteDate > localDate
     }
 
-    /// Путь подставляется в скрипт, который выполнит Терминал, поэтому он
-    /// закрывается одинарными кавычками целиком — пробел или апостроф в имени
-    /// папки иначе разорвал бы команду.
-    static func shellQuoted(_ path: String) -> String {
-        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
+    /// Имя запускателя, который кладёт Scripts/install.sh. Живёт он в
+    /// ~/Library/Application Scripts — единственном месте, откуда песочное
+    /// приложение может запустить что-то вне своей песочницы. Свой контейнер
+    /// не годится: macOS помечает его карантином целиком, и Gatekeeper
+    /// объявляет любой запуск оттуда повреждённым приложением.
+    static let launcherName = "update.sh"
 
-    static func updateScript(repositoryPath: String) -> String {
-        """
-        #!/bin/bash
-        set -euo pipefail
-
-        REPO=\(shellQuoted(repositoryPath))
-
-        echo "Обновление Curty"
-        echo "Репозиторий: $REPO"
-        echo
-
-        if [ ! -d "$REPO/.git" ]; then
-            echo "Репозиторий не найден по этому пути." >&2
-            echo "Склонируйте его заново и запустите Scripts/install.sh:" >&2
-            echo "  git clone https://github.com/\(repository).git" >&2
-            exit 1
-        fi
-
-        cd "$REPO"
-        git pull --ff-only
-        bash Scripts/install.sh
-
-        echo
-        echo "Готово. Окно можно закрыть."
-        """
+    static func launcherURL() throws -> URL {
+        try FileManager.default.url(
+            for: .applicationScriptsDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        ).appendingPathComponent(launcherName)
     }
 }
 
@@ -79,7 +61,6 @@ final class UpdateChecker: ObservableObject {
     /// чем и обновлять нечего.
     let buildCommit: String?
     let buildDate: Date?
-    private let repositoryPath: String?
 
     private var lastCheck: Date?
     private let session: URLSession = {
@@ -94,14 +75,13 @@ final class UpdateChecker: ObservableObject {
         let info = bundle.infoDictionary
         buildCommit = (info?["CurtyBuildCommit"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         buildDate = (info?["CurtyBuildCommitDate"] as? String).flatMap(Self.parseDate)
-        repositoryPath = (info?["CurtyRepositoryPath"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     var shortCommit: String? { buildCommit.map { String($0.prefix(7)) } }
 
     var canInstallUpdate: Bool {
-        guard case .available = state else { return false }
-        return repositoryPath != nil
+        if case .available = state { return true }
+        return false
     }
 
     /// Настройки открывают вкладку часто, а лимит GitHub для анонимных запросов
@@ -140,41 +120,32 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    func startUpdate() {
-        guard let repositoryPath else {
-            state = .failed("В сборке не записан путь к репозиторию. Обновите вручную: git pull && Scripts/install.sh")
-            return
+    /// Возвращает true, если обновление действительно запущено: панель
+    /// закрывается только тогда, иначе сообщение об ошибке уедет вместе с ней.
+    @discardableResult
+    func startUpdate() -> Bool {
+        guard let launcher = try? UpdatePolicy.launcherURL(),
+              FileManager.default.isExecutableFile(atPath: launcher.path) else {
+            state = .failed("Запускатель обновления не найден. Выполните один раз вручную: git pull && Scripts/install.sh — он положит его на место.")
+            return false
         }
 
-        // Скрипт живёт в самом репозитории: так его видно и можно прочитать
-        // до запуска. Терминал открывает его как обычный файл — запустить его
-        // сама Curty не может, дочерний процесс унаследовал бы её песочницу и
-        // не добрался бы ни до репозитория, ни до /Applications.
-        let inRepository = URL(fileURLWithPath: repositoryPath)
-            .appendingPathComponent("Scripts/update.command")
-        if NSWorkspace.shared.open(inRepository) { return }
-
-        // Запасной путь на случай, если песочница не отдаёт файл за пределами
-        // контейнера: своя копия того же скрипта внутри него.
-        let script = ApplicationPaths.supportDirectory.appendingPathComponent("update.command")
         do {
-            try UpdatePolicy.updateScript(repositoryPath: repositoryPath).write(
-                to: script,
-                atomically: true,
-                encoding: .utf8
-            )
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+            // NSUserUnixTask — единственный способ для песочного приложения
+            // запустить что-то вне песочницы. Собрать и переустановить себя
+            // Curty иначе не может: обычный дочерний процесс унаследовал бы её
+            // ограничения и не добрался бы ни до репозитория, ни до /Applications.
+            let task = try NSUserUnixTask(url: launcher)
+            task.execute(withArguments: nil) { error in
+                guard let error else { return }
+                Task { @MainActor [weak self] in
+                    self?.state = .failed("Не удалось запустить обновление: \(error.localizedDescription)")
+                }
+            }
+            return true
         } catch {
-            state = .failed("Не удалось подготовить обновление: \(error.localizedDescription)")
-            return
-        }
-
-        // Терминал открывает скрипт как обычный файл: сама Curty запустить его
-        // не может — дочерний процесс унаследовал бы её песочницу и не добрался
-        // бы ни до репозитория, ни до /Applications.
-        guard NSWorkspace.shared.open(script) else {
-            state = .failed("Не удалось открыть Терминал. Выполните вручную: cd \(repositoryPath) && git pull && Scripts/install.sh")
-            return
+            state = .failed("Не удалось запустить обновление: \(error.localizedDescription)")
+            return false
         }
     }
 

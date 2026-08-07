@@ -23,14 +23,12 @@ cp "$BIN_DIRECTORY/Curty" "$APP/Contents/MacOS/Curty"
 cp "$ROOT/Config/Info.plist" "$APP/Contents/Info.plist"
 
 # Кнопке обновления не с чем сравнивать удалённую ветку, пока сборка не знает
-# собственный коммит, а скрипту обновления некуда идти, пока он не знает путь
-# к этому репозиторию.
+# собственный коммит.
 COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
 COMMIT_DATE="$(git -C "$ROOT" show -s --format=%cI HEAD 2>/dev/null || true)"
 if [ -n "$COMMIT" ]; then
     /usr/libexec/PlistBuddy -c "Add :CurtyBuildCommit string $COMMIT" "$APP/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Add :CurtyBuildCommitDate string $COMMIT_DATE" "$APP/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c "Add :CurtyRepositoryPath string $ROOT" "$APP/Contents/Info.plist"
 else
     echo "warning: сборка вне git-репозитория, проверка обновлений будет недоступна" >&2
 fi

@@ -132,10 +132,18 @@ final class SecurityBoundaryTests: XCTestCase {
         )
     }
 
-    func testUpdateScriptQuotesRepositoryPath() {
-        let script = UpdatePolicy.updateScript(repositoryPath: "/Users/ay/Мои проекты/O'Brien/curty")
-        XCTAssertTrue(script.contains("REPO='/Users/ay/Мои проекты/O'\\''Brien/curty'"))
-        XCTAssertTrue(script.contains("git pull --ff-only"))
+    /// Имя и место запускателя — единственный договор между install.sh,
+    /// который его кладёт, и приложением, которое его запускает. Разъедутся —
+    /// кнопка перестанет работать молча.
+    func testUpdateLauncherLivesWhereTheInstallerPutsIt() throws {
+        XCTAssertEqual(UpdatePolicy.launcherName, "update.sh")
+        let launcher = try UpdatePolicy.launcherURL()
+        XCTAssertEqual(launcher.lastPathComponent, "update.sh")
+        // Вне контейнера: изнутри него запуск блокирует Gatekeeper.
+        XCTAssertFalse(launcher.path.contains("/Library/Containers/"))
+        // Имя папки подставляет система по идентификатору приложения, поэтому
+        // под тестами оно другое — проверяем сам каталог.
+        XCTAssertTrue(launcher.path.contains("/Library/Application Scripts/"))
     }
 
     func testAtomicJSONStoreRoundTrip() throws {
