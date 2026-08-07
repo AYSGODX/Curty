@@ -256,6 +256,21 @@ struct CurtyRowButton: View {
     }
 }
 
+/// Какую строку подсветить галочкой и каким по счёту разом. Одно и то же
+/// действие вызывают и кнопка, и ⌘C, а повторное копирование того же элемента
+/// должно подтверждаться заново — поэтому новый токен на каждое нажатие.
+struct RowCopyConfirmation: Equatable {
+    let itemID: UUID
+    let token: UUID
+
+    init(_ itemID: UUID) {
+        self.itemID = itemID
+        token = UUID()
+    }
+
+    func token(for id: UUID) -> UUID? { itemID == id ? token : nil }
+}
+
 /// Hover feedback for controls that draw themselves — system buttons, switches —
 /// where a background of our own cannot be slipped underneath.
 private struct CurtyHoverLift: ViewModifier {

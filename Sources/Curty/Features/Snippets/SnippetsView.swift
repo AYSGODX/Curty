@@ -3,6 +3,11 @@ import SwiftUI
 struct SnippetsView: View {
     @ObservedObject var store: SnippetStore
     @State private var draft: SnippetDraft?
+    @State private var selectedID: UUID?
+    @State private var copyConfirmation: RowCopyConfirmation?
+    /// Поиск живёт в том же окне, что и кнопка с ⌘C, и сочетание достанется
+    /// ей, а не полю. Пока курсор в поиске, копирование сниппета выключено.
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: 8) {
@@ -25,6 +30,7 @@ struct SnippetsView: View {
             HStack {
                 TextField("Поиск сниппетов", text: $store.query)
                     .textFieldStyle(.roundedBorder)
+                    .focused($isSearchFocused)
                 Button { draft = SnippetDraft(source: nil) } label: {
                     Image(systemName: "plus")
                 }
@@ -67,10 +73,11 @@ struct SnippetsView: View {
                                     ) { draft = SnippetDraft(source: snippet) }
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
-                                        title: "Копировать текст",
+                                        title: "Копировать текст (⌘C)",
                                         size: CurtyTheme.rowActionSize,
                                         glyphSize: 13,
-                                        confirmsWith: "checkmark"
+                                        confirmsWith: "checkmark",
+                                        confirmationToken: copyConfirmation?.token(for: snippet.id)
                                     ) { store.copy(snippet) }
 
                                     Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
@@ -86,11 +93,32 @@ struct SnippetsView: View {
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             .padding(10)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                            .background(background(for: snippet.id), in: RoundedRectangle(cornerRadius: 11))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 11)
+                                    .strokeBorder(selectedID == snippet.id ? CurtyTheme.accent.opacity(0.55) : .clear)
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedID = snippet.id
+                                // Клик по строке не уводит фокус из поля поиска
+                                // сам по себе, а без этого ⌘C останется выключен.
+                                isSearchFocused = false
+                            }
                         }
                     }
                 }
             }
+        }
+        // ⌘C копирует выделенный сниппет — то же, что кнопка в строке.
+        // Сочетание держит кнопка, а не обработчик нажатий: события с Command
+        // приходят в окно как key equivalent и до onKeyPress не доходят.
+        .background {
+            Button("Копировать выделенный сниппет") { copySelected() }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(selectedSnippet == nil || isSearchFocused)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .sheet(item: $draft) { target in
             SnippetEditor(
@@ -108,6 +136,20 @@ struct SnippetsView: View {
                 onCancel: { draft = nil }
             )
         }
+    }
+
+    private var selectedSnippet: Snippet? {
+        store.filteredItems.first { $0.id == selectedID }
+    }
+
+    private func copySelected() {
+        guard let snippet = selectedSnippet else { return }
+        store.copy(snippet)
+        copyConfirmation = RowCopyConfirmation(snippet.id)
+    }
+
+    private func background(for id: UUID) -> Color {
+        selectedID == id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
     }
 }
 

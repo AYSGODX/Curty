@@ -4,6 +4,8 @@ struct ClipboardView: View {
     @ObservedObject var store: ClipboardStore
     @ObservedObject var preferences: Preferences
     @State private var isConfirmingClear = false
+    @State private var selectedID: UUID?
+    @State private var copyConfirmation: RowCopyConfirmation?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -105,10 +107,11 @@ struct ClipboardView: View {
                                     }
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",
-                                        title: "Вернуть в буфер обмена",
+                                        title: "Вернуть в буфер обмена (⌘C)",
                                         size: CurtyTheme.rowActionSize,
                                         glyphSize: 13,
-                                        confirmsWith: "checkmark"
+                                        confirmsWith: "checkmark",
+                                        confirmationToken: copyConfirmation?.token(for: entry.id)
                                     ) { store.copy(entry) }
 
                                     Spacer().frame(width: CurtyTheme.rowActionDestructiveGap)
@@ -124,7 +127,13 @@ struct ClipboardView: View {
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             .padding(10)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                            .background(background(for: entry.id), in: RoundedRectangle(cornerRadius: 11))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 11)
+                                    .strokeBorder(selectedID == entry.id ? CurtyTheme.accent.opacity(0.55) : .clear)
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedID = entry.id }
                         }
                     }
                 }
@@ -133,6 +142,16 @@ struct ClipboardView: View {
             if let error = store.lastError {
                 CurtyErrorRow(message: error) { store.lastError = nil }
             }
+        }
+        // ⌘C возвращает выделенную запись в буфер — то же, что кнопка в строке.
+        // Сочетание держит кнопка, а не обработчик нажатий: события с Command
+        // приходят в окно как key equivalent и до onKeyPress не доходят.
+        .background {
+            Button("Вернуть выделенное в буфер") { copySelected() }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(selectedEntry == nil)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .confirmationDialog(
             "Очистить историю буфера?",
@@ -143,5 +162,19 @@ struct ClipboardView: View {
         } message: {
             Text("История хранится только в памяти, восстановить её будет нельзя.")
         }
+    }
+
+    private var selectedEntry: ClipboardEntry? {
+        store.entries.first { $0.id == selectedID }
+    }
+
+    private func copySelected() {
+        guard let entry = selectedEntry else { return }
+        store.copy(entry)
+        copyConfirmation = RowCopyConfirmation(entry.id)
+    }
+
+    private func background(for id: UUID) -> Color {
+        selectedID == id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
     }
 }

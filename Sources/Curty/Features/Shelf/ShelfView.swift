@@ -9,7 +9,7 @@ struct ShelfView: View {
     @State private var selectedID: UUID?
     /// Какую кнопку копирования подсветить галочкой после ⌘C и каким разом:
     /// повторное нажатие по тому же файлу должно подтверждаться заново.
-    @State private var copyConfirmation: CopyConfirmation?
+    @State private var copyConfirmation: RowCopyConfirmation?
     @FocusState private var isListFocused: Bool
 
     var body: some View {
@@ -209,14 +209,7 @@ struct ShelfView: View {
     private func copySelected() {
         guard let item = selectedItem else { return }
         store.copy(item)
-        copyConfirmation = CopyConfirmation(itemID: item.id, token: UUID())
-    }
-
-    private struct CopyConfirmation: Equatable {
-        let itemID: UUID
-        let token: UUID
-
-        func token(for id: UUID) -> UUID? { itemID == id ? token : nil }
+        copyConfirmation = RowCopyConfirmation(item.id)
     }
 
     private func rowIcon(for item: ShelfItem) -> String {
