@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalendarView: View {
     @ObservedObject var store: CalendarStore
+    let onHandOff: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
@@ -50,6 +51,26 @@ struct CalendarView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, minHeight: 80)
+                    }
+
+                    // Пустой список читается как «календарь не работает», хотя
+                    // чаще всего нужная учётная запись просто не подключена к
+                    // системе. Curty берёт события из всех календарей сразу.
+                    CurtyCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Не хватает календаря?")
+                                .font(.system(size: 12, weight: .medium))
+                            Text("Curty показывает все календари, подключённые к системному «Календарю» — Google, Exchange, iCloud. Отдельный вход в Curty не нужен: аккаунт добавляется один раз в настройках системы.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button("Учётные записи интернета") {
+                                store.openAccountSettings()
+                                onHandOff()
+                            }
+                            .buttonStyle(CurtySecondaryButtonStyle())
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
                     ScrollView {

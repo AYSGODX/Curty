@@ -143,6 +143,15 @@ final class CalendarStore: ObservableObject {
         NSWorkspace.shared.open(link)
     }
 
+    /// Google, Exchange и прочие сервисы попадают в Curty через системный
+    /// «Календарь»: события читаются из всех календарей сразу, отдельного
+    /// входа в каждый сервис не нужно. Узнать об этом человеку неоткуда,
+    /// поэтому из пустого состояния ведём прямо в нужный раздел настроек.
+    func openAccountSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     func openPrivacySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
         NSWorkspace.shared.open(url)
