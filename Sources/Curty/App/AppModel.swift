@@ -153,6 +153,12 @@ final class AppModel: ObservableObject {
             .sink { [weak self] _ in self?.calendar.refreshAuthorization() }
             .store(in: &cancellables)
 
+        calendar.$authorization
+            .removeDuplicates()
+            .filter { $0 == .granted }
+            .sink { [weak preferences] _ in preferences?.calendarAccessWasGranted = true }
+            .store(in: &cancellables)
+
         clipboard.onImageSaved = { [weak shelf] url in shelf?.addOwnedFile(url) }
         calendar.onPermissionPromptChange = { [weak self] isPresenting in
             self?.isPresentingDialog = isPresenting

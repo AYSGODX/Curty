@@ -59,6 +59,7 @@ final class Preferences: ObservableObject {
         static let toolOrder = "layout.toolOrder"
         static let respectFullScreen = "layout.respectFullScreen"
         static let displayTimeZone = "layout.displayTimeZone"
+        static let calendarWasGranted = "calendar.wasGranted"
     }
 
     private let defaults: UserDefaults
@@ -80,6 +81,13 @@ final class Preferences: ObservableObject {
     /// шторка не раскрывается: курсор к верхней кромке там ходит по делу.
     @Published var respectFullScreenEnabled: Bool {
         didSet { defaults.set(respectFullScreenEnabled, forKey: Key.respectFullScreen) }
+    }
+
+    /// Доступ к календарю однажды выдавали. Нужно, чтобы отличить «ещё не
+    /// просили» от «сбросилось после обновления»: для человека это очень
+    /// разные вещи, а система в обоих случаях отвечает одинаково.
+    @Published var calendarAccessWasGranted: Bool {
+        didSet { defaults.set(calendarAccessWasGranted, forKey: Key.calendarWasGranted) }
     }
 
     /// Идентификатор пояса, в котором показывать время. Пустая строка —
@@ -129,6 +137,7 @@ final class Preferences: ObservableObject {
         mediaIntegrationEnabled = defaults.bool(forKey: Key.mediaIntegration)
         respectFullScreenEnabled = defaults.bool(forKey: Key.respectFullScreen)
         displayTimeZoneIdentifier = defaults.string(forKey: Key.displayTimeZone) ?? ""
+        calendarAccessWasGranted = defaults.bool(forKey: Key.calendarWasGranted)
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }

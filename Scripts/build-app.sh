@@ -5,6 +5,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIGURATION="${1:-release}"
 APP="$ROOT/.build/Products/Curty.app"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
+STABLE_IDENTITY_NAME="${STABLE_IDENTITY_NAME:-Curty Self-Signed}"
+
+# Требование подписи ad-hoc сборки — cdhash, то есть хеш содержимого. Он меняется
+# при каждой пересборке, поэтому macOS видит новое приложение и сбрасывает все
+# выданные разрешения: календарь, управление плеером. Подпись собственным
+# сертификатом даёт требование по идентификатору и сертификату, и разрешения
+# переживают обновление. Сертификат создаётся один раз вручную, см. README.
+if [ "$SIGNING_IDENTITY" = "-" ] \
+   && security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$STABLE_IDENTITY_NAME\""; then
+    SIGNING_IDENTITY="$STABLE_IDENTITY_NAME"
+fi
 
 # Проверка границ должна выполняться сама, иначе README обещает гарантию,
 # которой нет: вручную её никто не запускает.
@@ -55,7 +66,15 @@ if [ "$SIGNING_IDENTITY" = "-" ]; then
     codesign --force --options runtime --timestamp=none \
         --entitlements "$ROOT/Config/Curty.entitlements" \
         --sign - "$APP"
-    echo "Development build created with an ad-hoc identity. Do not distribute it."
+    echo "Сборка подписана разово (ad-hoc): выданные разрешения сбросятся при"
+    echo "следующей пересборке. Как это вылечить — раздел «Разрешения» в README."
+elif [ "$SIGNING_IDENTITY" = "$STABLE_IDENTITY_NAME" ]; then
+    # Метка времени требует обращения к серверу Apple и с собственным
+    # сертификатом не проходит.
+    codesign --force --options runtime --timestamp=none \
+        --entitlements "$ROOT/Config/Curty.entitlements" \
+        --sign "$SIGNING_IDENTITY" "$APP"
+    echo "Подписано локальным сертификатом «$SIGNING_IDENTITY»: разрешения переживут обновление."
 else
     codesign --force --options runtime --timestamp \
         --entitlements "$ROOT/Config/Curty.entitlements" \
