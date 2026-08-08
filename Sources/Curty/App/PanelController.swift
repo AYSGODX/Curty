@@ -248,7 +248,11 @@ final class PanelController {
     /// case hold it open until the cursor has actually visited it once.
     func open(holdingUntilCursorArrives: Bool = false) {
         cancelClose()
-        guard !model.isPanelOpen else { return }
+        // Верить только флагу нельзя. Если состояние говорит «открыта», а на
+        // экране панели нет, эта проверка отсекала наведение — и приложение
+        // выглядело мёртвым, хотя было живо: значок на месте, процесс отвечает,
+        // а шторка не раскрывается ничем. Поэтому спрашиваем окно, а не флаг.
+        guard !model.isPanelOpen || !isPanelActuallyVisible else { return }
         awaitsCursorArrival = holdingUntilCursorArrives
         awaitsCursorArrivalSince = ProcessInfo.processInfo.systemUptime
         position(on: screenUnderMouse() ?? NSScreen.main)
@@ -334,8 +338,25 @@ final class PanelController {
         cursorTimer = timer
     }
 
+    /// Панель на экране, а не только по мнению модели: состояние и окно
+    /// однажды разошлись, и это оставило приложение без единого способа
+    /// раскрыть шторку.
+    private var isPanelActuallyVisible: Bool {
+        panel.isVisible && panel.alphaValue > 0.99
+    }
+
     private func sampleCursor() {
         let point = NSEvent.mouseLocation
+
+        // Расхождение состояния с экраном чинится здесь же: иначе панель
+        // остаётся «открытой» навсегда — с быстрым опросом курсора и плеера,
+        // то есть ещё и с лишней нагрузкой.
+        if model.isPanelOpen, !isPanelActuallyVisible, closeWorkItem == nil {
+            NSLog("curty: панель считалась открытой, но её не было на экране — состояние восстановлено")
+            hide()
+            return
+        }
+
         guard let screen = screen(containing: point) else { return }
         let activation = PanelInteractionPolicy.activationRect(
             screenFrame: screen.frame,
