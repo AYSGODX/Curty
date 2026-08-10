@@ -7,6 +7,8 @@ struct CalendarView: View {
 
     private var zone: TimeZone { preferences.displayTimeZone }
 
+    @State private var hoveredHorizon: CalendarStore.Horizon?
+
     var body: some View {
         VStack(spacing: 10) {
             if let error = store.lastError {
@@ -100,6 +102,7 @@ struct CalendarView: View {
                             onHandOff()
                         }
                         .buttonStyle(CurtySecondaryButtonStyle())
+                        .curtyHoverLift()
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -132,6 +135,7 @@ struct CalendarView: View {
                                 if meeting.link != nil {
                                     Button("Войти") { store.join(meeting) }
                                         .buttonStyle(CurtySecondaryButtonStyle())
+                                        .curtyHoverLift()
                                 }
                             }
                             .padding(9)
@@ -151,16 +155,25 @@ struct CalendarView: View {
                 } label: {
                     Text(option.title)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(store.horizon == option ? .white : .secondary)
+                        .foregroundStyle(tint(for: option))
                         .frame(maxWidth: .infinity)
                         .frame(height: 22)
                         .background(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(store.horizon == option ? CurtyTheme.accent : .clear)
+                                .fill(background(for: option))
                         )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        if hovering {
+                            hoveredHorizon = option
+                        } else if hoveredHorizon == option {
+                            hoveredHorizon = nil
+                        }
+                    }
+                }
                 .accessibilityLabel(option.title)
             }
         }
@@ -170,6 +183,16 @@ struct CalendarView: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(.primary.opacity(0.07))
         )
+    }
+
+    private func tint(for option: CalendarStore.Horizon) -> Color {
+        if store.horizon == option { return .white }
+        return hoveredHorizon == option ? .primary : .secondary
+    }
+
+    private func background(for option: CalendarStore.Horizon) -> Color {
+        if store.horizon == option { return CurtyTheme.accent }
+        return hoveredHorizon == option ? .primary.opacity(0.10) : .clear
     }
 
     private func accessCard(
@@ -188,6 +211,7 @@ struct CalendarView: View {
                     .multilineTextAlignment(.center)
                 Button(actionTitle, action: action)
                     .buttonStyle(CurtyProminentButtonStyle())
+                    .curtyHoverLift()
             }
             .frame(maxWidth: .infinity, minHeight: 80)
         }
