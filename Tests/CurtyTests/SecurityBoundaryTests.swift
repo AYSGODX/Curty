@@ -132,27 +132,27 @@ final class SecurityBoundaryTests: XCTestCase {
         )
     }
 
-    /// Порядок по умолчанию во всех списках — свежее сверху, и считается он
-    /// по времени, а не по тому, как элемент попал в список.
+    /// Новое сверху, но дальше список неподвижен: правка не поднимает
+    /// элемент. Перескакивающие строки сбивают с толку — глаз ищет запись
+    /// там, где её оставил.
     @MainActor
-    func testFreshestEntryComesFirst() {
+    func testEditingDoesNotReorderLists() {
         let notes = NoteStore()
         notes.add()
         notes.add()
+        let newest = notes.items[0].id
         let older = notes.items[1].id
-        XCTAssertEqual(notes.ordered.first?.id, notes.items[0].id, "новая заметка сверху")
 
-        notes.update(older, text: "правка поднимает заметку наверх")
-        XCTAssertEqual(notes.ordered.first?.id, older)
+        notes.update(older, text: "правка не должна двигать заметку")
+        XCTAssertEqual(notes.items.map(\.id), [newest, older])
 
         let snippets = SnippetStore()
         snippets.add(title: "первый", body: "1")
         snippets.add(title: "второй", body: "2")
-        let first = snippets.items[1]
-        XCTAssertEqual(snippets.ordered.first?.title, "второй")
+        XCTAssertEqual(snippets.filteredItems.map(\.title), ["второй", "первый"])
 
-        snippets.update(first, title: "первый", body: "1 с правкой")
-        XCTAssertEqual(snippets.ordered.first?.title, "первый")
+        snippets.update(snippets.items[1], title: "первый", body: "1 с правкой")
+        XCTAssertEqual(snippets.filteredItems.map(\.title), ["второй", "первый"])
     }
 
     /// Два предела уже разъезжались: заметка допускала вдвое больше, чем

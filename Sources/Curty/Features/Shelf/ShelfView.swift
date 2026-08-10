@@ -60,7 +60,7 @@ struct ShelfView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(store.ordered) { item in
+                        ForEach(store.items) { item in
                             row(for: item)
                         }
                     }

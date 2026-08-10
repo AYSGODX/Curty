@@ -10,7 +10,7 @@ struct ClipboardEntry: Identifiable, Equatable {
 
     let id = UUID()
     let payload: Payload
-    var capturedAt: Date
+    let capturedAt: Date
 
     var preview: String {
         switch payload {
@@ -127,11 +127,6 @@ enum ClipboardVault {
 @MainActor
 final class ClipboardStore: ObservableObject {
     @Published private(set) var entries: [ClipboardEntry] = []
-
-    /// Порядок по умолчанию — свежее сверху. Раньше он держался на том, как
-    /// запись попала в список, и это уже расходилось с показанным временем:
-    /// копирование поднимало запись наверх, а время в строке оставалось старым.
-    var ordered: [ClipboardEntry] { entries.sorted { $0.capturedAt > $1.capturedAt } }
     @Published private(set) var isMonitoring = false
     @Published var lastError: String?
 
@@ -175,12 +170,6 @@ final class ClipboardStore: ObservableObject {
         }
         lastChangeCount = pasteboard.changeCount
 
-        // Часто используемая запись иначе постепенно вытесняется вниз и
-        // выпадает за лимит, хотя ей пользуются регулярно. Вместе с местом
-        // обновляется и время: строка показывает, когда записью пользовались.
-        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-            entries[index].capturedAt = Date()
-        }
     }
 
     func saveImage(_ entry: ClipboardEntry) {
@@ -238,6 +227,9 @@ final class ClipboardStore: ObservableObject {
         return bitmap.representation(using: .png, properties: [:])
     }
 
+    /// Место в списке задаётся появлением записи и дальше не меняется:
+    /// список должен оставаться там, где его оставили, а не перетасовываться
+    /// от обращений к нему.
     private func record(_ entry: ClipboardEntry) {
         entries.removeAll { $0.payload == entry.payload }
         entries.insert(entry, at: 0)

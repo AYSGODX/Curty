@@ -81,7 +81,7 @@ struct ClipboardView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(store.ordered) { entry in
+                        ForEach(store.entries) { entry in
                             HStack(spacing: 10) {
                                 Image(systemName: entry.symbol)
                                     .frame(width: 22)
