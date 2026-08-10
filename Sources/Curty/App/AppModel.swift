@@ -85,10 +85,15 @@ final class AppModel: ObservableObject {
     /// и так принадлежит нам, а понижение увело бы панель за чужие окна.
     @Published var isPresentingEditor = false
 
+    /// Открыто выпадающее меню — список языков, часовых поясов. Оно рисуется
+    /// поверх панели и выходит за её границы, так что при выборе курсор
+    /// оказывается снаружи: панель уезжала, а меню оставалось висеть.
+    @Published var isPresentingMenu = false
+
     /// Панель остаётся на экране, даже если курсор ушёл. Проверка была
     /// размазана по трём местам, и добавить к ней четвёртую причину значило
     /// не забыть про каждое.
-    var keepsPanelOpen: Bool { isPinned || isPresentingDialog || isPresentingEditor }
+    var keepsPanelOpen: Bool { isPinned || isPresentingDialog || isPresentingEditor || isPresentingMenu }
 
     /// Wired by the panel controller, which owns the window itself.
     var onDialogPresentationChange: ((Bool) -> Void)?

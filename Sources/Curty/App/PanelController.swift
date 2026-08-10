@@ -180,6 +180,10 @@ final class PanelController {
     private var localMouseMonitor: Any?
     private var clickMonitor: Any?
     private var screenObserver: NSObjectProtocol?
+    private var menuObservers: [NSObjectProtocol] = []
+    /// Меню бывают вложенными, и подменю закрывается раньше родителя. Считаем
+    /// глубину, иначе выход из подменю снимал бы удержание раньше времени.
+    private var trackingMenus = 0
     private var overlayCheckedAt: TimeInterval = 0
     private var overlayWasVisible = false
     private var suppressingSince: TimeInterval?
@@ -223,6 +227,28 @@ final class PanelController {
         }
         model.onCloseRequest = { [weak self] in self?.dismiss() }
 
+        // SwiftUI рисует выпадающие списки настоящим меню AppKit, и оно
+        // сообщает о начале и конце показа. Другого способа узнать, что список
+        // открыт, у вьюхи нет.
+        for name in [NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification] {
+            let observer = NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if notification.name == NSMenu.didBeginTrackingNotification {
+                        self.trackingMenus += 1
+                    } else {
+                        self.trackingMenus = max(0, self.trackingMenus - 1)
+                    }
+                    self.model.isPresentingMenu = self.trackingMenus > 0
+                }
+            }
+            menuObservers.append(observer)
+        }
+
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -244,6 +270,9 @@ final class PanelController {
         localMouseMonitor = nil
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        menuObservers.forEach(NotificationCenter.default.removeObserver)
+        menuObservers.removeAll()
+        trackingMenus = 0
         panel.orderOut(nil)
     }
 
