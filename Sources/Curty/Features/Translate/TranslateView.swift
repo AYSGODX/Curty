@@ -188,13 +188,20 @@ struct TranslateView: View {
         .animation(.easeOut(duration: 0.18), value: isFloating)
     }
 
+    /// Не отключённое поле ввода, а обычный текст: отключённое поле не даёт
+    /// ни выделить перевод, ни скопировать его с клавиатуры — оставалась одна
+    /// кнопка. Правка перевода смысла не имеет, а выделение имеет.
     private var resultEditor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: $store.translatedText)
-                .font(.system(size: 13))
-                .scrollContentBackground(.hidden)
-                .frame(height: 62)
-                .disabled(true)
+            ScrollView {
+                Text(store.translatedText)
+                    .font(.system(size: 13))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.horizontal, 5)
+                    .padding(.top, 7)
+            }
+            .scrollBounceBehavior(.basedOnSize)
 
             if store.translatedText.isEmpty {
                 Text("Перевод появится здесь")
