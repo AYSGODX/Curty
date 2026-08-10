@@ -276,7 +276,7 @@ final class PanelController {
 
     func close() {
         closeWorkItem = nil
-        guard !model.isPinned else { return }
+        guard !model.keepsPanelOpen else { return }
         hide()
     }
 
@@ -387,7 +387,7 @@ final class PanelController {
             return
         }
 
-        guard model.isPanelOpen, !model.isPinned, !model.isPresentingDialog else { return }
+        guard model.isPanelOpen, !model.keepsPanelOpen else { return }
         if panel.attachedSheet != nil || panel.frame.insetBy(dx: -8, dy: -8).contains(point) {
             awaitsCursorArrival = false
             cancelClose()
@@ -440,7 +440,7 @@ final class PanelController {
     }
 
     private func dismissIfClickedOutside() {
-        guard model.isPanelOpen, !model.isPinned, !model.isPresentingDialog else { return }
+        guard model.isPanelOpen, !model.keepsPanelOpen else { return }
         guard !panel.frame.contains(NSEvent.mouseLocation) else { return }
         dismiss()
     }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SnippetsView: View {
     @ObservedObject var store: SnippetStore
+    @ObservedObject var model: AppModel
     @State private var draft: SnippetDraft?
     @State private var selectedID: UUID?
     @State private var copyConfirmation: RowCopyConfirmation?
@@ -36,20 +37,9 @@ struct SnippetsView: View {
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(.primary.opacity(isSearchFocused ? 0.09 : 0.055))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(
-                                isSearchFocused ? CurtyTheme.accent : .primary.opacity(0.10),
-                                lineWidth: isSearchFocused ? 1.5 : 1
-                            )
-                    )
+                    .curtyFieldChrome(isFocused: isSearchFocused)
                     .focused($isSearchFocused)
                     .focusEffectDisabled()
-                    .animation(.easeOut(duration: 0.14), value: isSearchFocused)
 
                 Button { draft = SnippetDraft(source: nil) } label: {
                     Image(systemName: "plus")
@@ -147,6 +137,12 @@ struct SnippetsView: View {
         // что пришлось на пустое место.
         .contentShape(Rectangle())
         .onTapGesture { isSearchFocused = false }
+        // Пока редактор на экране, панель не должна уезжать из-под курсора:
+        // окно редактора висит отдельно и осталось бы висеть в одиночестве.
+        .onChange(of: draft != nil) { _, isPresenting in
+            model.isPresentingEditor = isPresenting
+        }
+        .onDisappear { model.isPresentingEditor = false }
         .sheet(item: $draft) { target in
             SnippetEditor(
                 heading: target.source == nil ? "Новый сниппет" : "Изменить сниппет",
@@ -186,9 +182,12 @@ private struct SnippetDraft: Identifiable {
 }
 
 private struct SnippetEditor: View {
+    private enum Field { case title, body }
+
     let heading: String
     @State private var title: String
     @State private var text: String
+    @FocusState private var focus: Field?
     let onSave: (String, String) -> Void
     let onCancel: () -> Void
 
@@ -209,12 +208,29 @@ private struct SnippetEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(heading).font(.headline)
+
             TextField("Название", text: $title)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .curtyFieldChrome(isFocused: focus == .title)
+                .focused($focus, equals: .title)
+                .focusEffectDisabled()
+
             TextEditor(text: $text)
+                .font(.system(size: 12))
+                // Своя подложка вместо системной: иначе внутри рамки остаётся
+                // прямоугольник чужого цвета.
+                .scrollContentBackground(.hidden)
+                .padding(6)
                 .frame(height: 120)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+                .curtyFieldChrome(isFocused: focus == .body)
+                .focused($focus, equals: .body)
+                .focusEffectDisabled()
+
             HStack {
                 Button("Отмена", action: onCancel)
+                    .buttonStyle(CurtySecondaryButtonStyle())
                 Spacer()
                 Button("Сохранить") { onSave(title, text) }
                     .buttonStyle(CurtyProminentButtonStyle())

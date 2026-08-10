@@ -264,7 +264,7 @@ struct PanelRootView: View {
             case .media: MediaView(store: model.media, preferences: model.preferences)
             case .shelf: ShelfView(store: model.shelf, model: model)
             case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences)
-            case .snippets: SnippetsView(store: model.snippets)
+            case .snippets: SnippetsView(store: model.snippets, model: model)
             case .calendar: CalendarView(store: model.calendar, preferences: model.preferences) { model.requestPanelClose() }
             case .translate: TranslateView(store: model.translate)
             case .notes: NotesView(store: model.notes)

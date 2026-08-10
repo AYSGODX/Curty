@@ -80,6 +80,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Своё модальное окно поверх панели — например, редактор сниппета. В
+    /// отличие от системного диалога уровень окна ему понижать не нужно: оно
+    /// и так принадлежит нам, а понижение увело бы панель за чужие окна.
+    @Published var isPresentingEditor = false
+
+    /// Панель остаётся на экране, даже если курсор ушёл. Проверка была
+    /// размазана по трём местам, и добавить к ней четвёртую причину значило
+    /// не забыть про каждое.
+    var keepsPanelOpen: Bool { isPinned || isPresentingDialog || isPresentingEditor }
+
     /// Wired by the panel controller, which owns the window itself.
     var onDialogPresentationChange: ((Bool) -> Void)?
     var onCloseRequest: (() -> Void)?

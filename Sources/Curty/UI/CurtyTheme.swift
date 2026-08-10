@@ -280,6 +280,36 @@ struct RowCopyConfirmation: Equatable {
     func token(for id: UUID) -> UUID? { itemID == id ? token : nil }
 }
 
+/// Рамка поля ввода. Системная обводка фокуса синяя и к оформлению панели
+/// отношения не имеет, поэтому рисуем свою: в покое еле заметную, в фокусе —
+/// акцентную.
+private struct CurtyFieldChrome: ViewModifier {
+    let isFocused: Bool
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.primary.opacity(isFocused ? 0.09 : 0.055))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isFocused ? CurtyTheme.accent : .primary.opacity(0.10),
+                        lineWidth: isFocused ? 1.5 : 1
+                    )
+            )
+            .animation(.easeOut(duration: 0.14), value: isFocused)
+    }
+}
+
+extension View {
+    func curtyFieldChrome(isFocused: Bool, cornerRadius: CGFloat = 9) -> some View {
+        modifier(CurtyFieldChrome(isFocused: isFocused, cornerRadius: cornerRadius))
+    }
+}
+
 /// Hover feedback for controls that draw themselves — system buttons, switches —
 /// where a background of our own cannot be slipped underneath.
 private struct CurtyHoverLift: ViewModifier {
