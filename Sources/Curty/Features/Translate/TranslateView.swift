@@ -8,6 +8,9 @@ struct TranslateView: View {
     }
 
     @ObservedObject var store: TranslateStore
+    /// Уводим в системные настройки — панель при этом должна закрыться, иначе
+    /// она висит поверх открывшегося окна.
+    let onHandOff: () -> Void
     @State private var configuration: TranslationSession.Configuration?
     /// Какая пара языков сейчас в сессии. Если та же — сессию не пересоздаём,
     /// а просим повторить перевод: пересоздание сбрасывает подготовку пакета.
@@ -100,6 +103,13 @@ struct TranslateView: View {
             }
             ForEach(store.supported, id: \.self) { code in
                 Button(TranslationLanguagePolicy.title(for: code)) { select(code) }
+            }
+            Divider()
+            // Пакеты качаются по требованию, и каждый новый язык спрашивает
+            // разрешения посреди работы. Здесь их можно забрать разом и забыть.
+            Button("Загрузить языки заранее…") {
+                openLanguageSettings()
+                onHandOff()
             }
         } label: {
             HStack(spacing: 4) {
@@ -257,6 +267,13 @@ struct TranslateView: View {
         } catch {
             store.status = .failed(error.localizedDescription)
         }
+    }
+
+    /// Раздел «Язык и регион»: там системный переводчик держит список языков и
+    /// позволяет скачать их впрок.
+    private func openLanguageSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Localization-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func copyTranslation() {

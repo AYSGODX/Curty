@@ -310,7 +310,7 @@ struct PanelRootView: View {
             case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences)
             case .snippets: SnippetsView(store: model.snippets, model: model)
             case .calendar: CalendarView(store: model.calendar, preferences: model.preferences) { model.requestPanelClose() }
-            case .translate: TranslateView(store: model.translate)
+            case .translate: TranslateView(store: model.translate) { model.requestPanelClose() }
             case .notes: NotesView(store: model.notes)
             case .settings: SettingsPane(model: model)
             }
