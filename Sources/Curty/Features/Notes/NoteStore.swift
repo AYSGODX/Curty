@@ -25,6 +25,10 @@ final class NoteStore: ObservableObject {
     @Published private(set) var items: [ScratchNote] = []
     @Published var selectedID: UUID?
     @Published var lastError: String?
+
+    /// Порядок по умолчанию — свежее сверху. По времени изменения: заметка,
+    /// в которой пишут прямо сейчас, оказывается первой.
+    var ordered: [ScratchNote] { items.sorted { $0.modifiedAt > $1.modifiedAt } }
     @Published private(set) var pendingDeletion: PendingDeletion<ScratchNote>?
 
     private let store = AtomicJSONStore<[ScratchNote]>(

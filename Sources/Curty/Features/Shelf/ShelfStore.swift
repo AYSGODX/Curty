@@ -39,6 +39,9 @@ private struct StoredShelfItem: Codable {
 @MainActor
 final class ShelfStore: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
+
+    /// Порядок по умолчанию — свежее сверху.
+    var ordered: [ShelfItem] { items.sorted { $0.addedAt > $1.addedAt } }
     @Published var lastError: String?
 
     private let store = AtomicJSONStore<[StoredShelfItem]>(

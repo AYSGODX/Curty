@@ -132,6 +132,29 @@ final class SecurityBoundaryTests: XCTestCase {
         )
     }
 
+    /// Порядок по умолчанию во всех списках — свежее сверху, и считается он
+    /// по времени, а не по тому, как элемент попал в список.
+    @MainActor
+    func testFreshestEntryComesFirst() {
+        let notes = NoteStore()
+        notes.add()
+        notes.add()
+        let older = notes.items[1].id
+        XCTAssertEqual(notes.ordered.first?.id, notes.items[0].id, "новая заметка сверху")
+
+        notes.update(older, text: "правка поднимает заметку наверх")
+        XCTAssertEqual(notes.ordered.first?.id, older)
+
+        let snippets = SnippetStore()
+        snippets.add(title: "первый", body: "1")
+        snippets.add(title: "второй", body: "2")
+        let first = snippets.items[1]
+        XCTAssertEqual(snippets.ordered.first?.title, "второй")
+
+        snippets.update(first, title: "первый", body: "1 с правкой")
+        XCTAssertEqual(snippets.ordered.first?.title, "первый")
+    }
+
     /// Два предела уже разъезжались: заметка допускала вдвое больше, чем
     /// принимала история, и скопированная целиком заметка молча пропадала.
     @MainActor

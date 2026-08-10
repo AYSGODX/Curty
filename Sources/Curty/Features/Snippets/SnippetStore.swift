@@ -28,6 +28,10 @@ final class SnippetStore: ObservableObject {
         }
     }
 
+    /// Порядок по умолчанию — свежее сверху. По времени изменения, а не
+    /// добавления: правка поднимает сниппет наверх.
+    var ordered: [Snippet] { filteredItems.sorted { $0.modifiedAt > $1.modifiedAt } }
+
     func load() {
         let result = store.load(default: [])
         items = result.value

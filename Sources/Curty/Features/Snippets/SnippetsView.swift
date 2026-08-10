@@ -53,7 +53,7 @@ struct SnippetsView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(store.filteredItems) { snippet in
+                        ForEach(store.ordered) { snippet in
                             HStack(spacing: 10) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(snippet.title.isEmpty ? "Без названия" : snippet.title)

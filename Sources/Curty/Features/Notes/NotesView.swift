@@ -32,7 +32,7 @@ struct NotesView: View {
                 .buttonStyle(CurtyProminentButtonStyle())
                 ScrollView {
                     VStack(spacing: 6) {
-                        ForEach(store.items) { note in
+                        ForEach(store.ordered) { note in
                             Button {
                                 store.selectedID = note.id
                             } label: {
