@@ -239,5 +239,6 @@ private struct SnippetEditor: View {
         }
         .padding(20)
         .frame(width: 360)
+        .tint(CurtyTheme.accent)
     }
 }

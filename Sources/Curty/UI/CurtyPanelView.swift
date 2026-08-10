@@ -35,6 +35,10 @@ struct PanelRootView: View {
             }
         }
         .frame(width: 488, height: 420)
+        // Мигающая полоска в полях ввода и подсветка выделения красятся
+        // системным акцентом — у большинства он синий и к панели отношения не
+        // имеет. Задаётся один раз на всю панель, включая будущие поля.
+        .tint(CurtyTheme.accent)
         .background(colorScheme == .dark ? CurtyTheme.darkBackground : CurtyTheme.warmBackground)
         .clipShape(RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous))
         .overlay(
