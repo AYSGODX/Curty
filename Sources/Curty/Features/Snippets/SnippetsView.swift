@@ -28,13 +28,34 @@ struct SnippetsView: View {
     private var content: some View {
         VStack(spacing: 10) {
             HStack {
+                // Системное поле приносит с собой синюю обводку фокуса, которая
+                // не имеет отношения к остальному оформлению панели. Рамку
+                // рисуем сами и подсвечиваем акцентом, когда курсор в поле.
                 TextField("Поиск сниппетов", text: $store.query)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(.primary.opacity(isSearchFocused ? 0.09 : 0.055))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(
+                                isSearchFocused ? CurtyTheme.accent : .primary.opacity(0.10),
+                                lineWidth: isSearchFocused ? 1.5 : 1
+                            )
+                    )
                     .focused($isSearchFocused)
+                    .focusEffectDisabled()
+                    .animation(.easeOut(duration: 0.14), value: isSearchFocused)
+
                 Button { draft = SnippetDraft(source: nil) } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(CurtyProminentButtonStyle())
+                .curtyHoverLift(scale: 1.08)
                 .help("Новый сниппет")
             }
             if store.filteredItems.isEmpty {
@@ -120,6 +141,12 @@ struct SnippetsView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         }
+        // Клик мимо поля снимает с него фокус — иначе рамка остаётся
+        // подсвеченной, и непонятно, куда попадёт следующее нажатие клавиш.
+        // Строки и кнопки обрабатывают нажатие сами, сюда доходит только то,
+        // что пришлось на пустое место.
+        .contentShape(Rectangle())
+        .onTapGesture { isSearchFocused = false }
         .sheet(item: $draft) { target in
             SnippetEditor(
                 heading: target.source == nil ? "Новый сниппет" : "Изменить сниппет",
