@@ -49,10 +49,14 @@ final class NoteStore: ObservableObject {
         scheduleSave()
     }
 
+    /// Предел длины заметки. История буфера обязана принимать хотя бы столько
+    /// же, иначе скопированная целиком заметка в неё не попадает.
+    static let maxCharacters = 250_000
+
     func update(_ id: UUID, text: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        guard text.count <= 250_000 else {
-            lastError = "Заметка длиннее 250 000 символов не сохраняется."
+        guard text.count <= Self.maxCharacters else {
+            lastError = "Заметка длиннее \(Self.maxCharacters) символов не сохраняется."
             return
         }
         items[index].text = text

@@ -36,7 +36,10 @@ struct ClipboardEntry: Identifiable, Equatable {
 
 enum ClipboardPolicy {
     static let maxEntries = 30
-    static let maxTextCharacters = 100_000
+    /// Не ниже предела заметки: иначе скопированная целиком длинная заметка
+    /// молча отвергается, и со стороны это выглядит как «копирование
+    /// перестало работать».
+    static let maxTextCharacters = NoteStore.maxCharacters
     static let maxImageBytes = 20 * 1_024 * 1_024
     /// Поэлементного лимита мало: тридцать снимков по двадцать мегабайт — это
     /// шестьсот мегабайт в памяти фоновой утилиты.
@@ -189,6 +192,14 @@ final class ClipboardStore: ObservableObject {
     private func poll() {
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
+
+        // Копию, сделанную внутри самой Curty — ⌘C в заметке, в переводе, в
+        // поле поиска, — в историю класть незачем: текст и так лежит в
+        // приложении, а в списке появлялся бы дубль. Признак простой: ключевое
+        // окно принадлежит нам, значит копировали у нас. Наши собственные
+        // команды копирования помечены отдельно, но системное ⌘C в текстовом
+        // поле пометить нечем — оно проходит мимо нашего кода.
+        guard NSApp.keyWindow == nil else { return }
 
         let typeNames = (pasteboard.types ?? []).map(\.rawValue)
         guard !ClipboardPolicy.shouldIgnore(typeNames: typeNames),

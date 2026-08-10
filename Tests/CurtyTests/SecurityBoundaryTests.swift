@@ -132,6 +132,13 @@ final class SecurityBoundaryTests: XCTestCase {
         )
     }
 
+    /// Два предела уже разъезжались: заметка допускала вдвое больше, чем
+    /// принимала история, и скопированная целиком заметка молча пропадала.
+    @MainActor
+    func testClipboardAcceptsEverythingANoteCanHold() {
+        XCTAssertGreaterThanOrEqual(ClipboardPolicy.maxTextCharacters, NoteStore.maxCharacters)
+    }
+
     @MainActor
     func testCalendarShowsOnlyWhatIsStillAhead() {
         let now = Date(timeIntervalSince1970: 1_000_000)
