@@ -260,7 +260,11 @@ struct TranslateView: View {
             // Называем именно тот язык, которого не хватает: пара может быть
             // любой, а «языки не загружены» после уже сделанной загрузки
             // читается как «всё стёрлось».
-            store.missingLanguage = status == .supported ? pair.from : nil
+            let offer = TranslationLanguagePolicy.shouldOfferDownload(
+                systemSaysMissing: status == .supported,
+                alreadyWorked: store.pairAlreadyWorked(pair)
+            )
+            store.missingLanguage = offer ? pair.from : nil
         }
     }
 
@@ -341,6 +345,7 @@ struct TranslateView: View {
             // проверка доступности. Ей веры меньше, чем состоявшемуся переводу:
             // сразу после запуска она успевает соврать.
             store.missingLanguage = nil
+            store.rememberPairWorks()
         } catch {
             store.status = .failed(error.localizedDescription)
         }

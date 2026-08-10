@@ -35,6 +35,16 @@ enum TranslationLanguagePolicy {
         target == "en" ? ("ru", "en") : ("en", target)
     }
 
+    static func key(for pair: (from: String, to: String)) -> String { "\(pair.from)>\(pair.to)" }
+
+    /// Предлагать загрузку стоит, только если система говорит, что пакета нет,
+    /// И мы сами ни разу не переводили этой парой. Одной системной проверки
+    /// мало: в песочнице она ошибается, и карточка всплывала на паре, которая
+    /// прекрасно работает.
+    static func shouldOfferDownload(systemSaysMissing: Bool, alreadyWorked: Bool) -> Bool {
+        systemSaysMissing && !alreadyWorked
+    }
+
     static func title(for code: String) -> String {
         Locale.current.localizedString(forLanguageCode: code)?.localizedCapitalized ?? code.uppercased()
     }
@@ -128,6 +138,17 @@ final class TranslateStore: ObservableObject {
             return
         }
         detected = TranslationLanguagePolicy.detect(sourceText)
+    }
+
+    func rememberPairWorks() {
+        guard let pair else { return }
+        let key = TranslationLanguagePolicy.key(for: pair)
+        guard !preferences.translateReadyPairs.contains(key) else { return }
+        preferences.translateReadyPairs.append(key)
+    }
+
+    func pairAlreadyWorked(_ pair: (from: String, to: String)) -> Bool {
+        preferences.translateReadyPairs.contains(TranslationLanguagePolicy.key(for: pair))
     }
 
     func clearResult() {

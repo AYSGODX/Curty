@@ -69,6 +69,7 @@ final class Preferences: ObservableObject {
         static let launchAtLoginAsked = "app.launchAtLoginAsked"
         static let translateSource = "translate.source"
         static let translateTarget = "translate.target"
+        static let translateReadyPairs = "translate.readyPairs"
     }
 
     private let defaults: UserDefaults
@@ -99,6 +100,14 @@ final class Preferences: ObservableObject {
 
     @Published var translateTargetCode: String {
         didSet { defaults.set(translateTargetCode, forKey: Key.translateTarget) }
+    }
+
+    /// Пары, на которых перевод уже получался. Системная проверка доступности
+    /// внутри песочницы отвечает «не загружено» даже когда пакет на месте —
+    /// проверено: снаружи она в тот же момент отвечает «загружено». Верить ей
+    /// нельзя, а состоявшемуся переводу можно.
+    @Published var translateReadyPairs: [String] {
+        didSet { defaults.set(translateReadyPairs, forKey: Key.translateReadyPairs) }
     }
 
     /// Про автозапуск уже спрашивали. Прописываться в объекты входа без спроса
@@ -165,6 +174,7 @@ final class Preferences: ObservableObject {
         displayTimeZoneIdentifier = defaults.string(forKey: Key.displayTimeZone) ?? ""
         calendarAccessWasGranted = defaults.bool(forKey: Key.calendarWasGranted)
         launchAtLoginAsked = defaults.bool(forKey: Key.launchAtLoginAsked)
+        translateReadyPairs = defaults.stringArray(forKey: Key.translateReadyPairs) ?? []
         translateSourceCode = defaults.string(forKey: Key.translateSource) ?? ""
         // По умолчанию переводим на язык системы: чаще всего человек вставляет
         // чужой текст, чтобы прочитать его на своём.

@@ -49,6 +49,16 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(ClipboardPolicy.removingText("/tmp/файл", from: entries).count, 3)
     }
 
+    /// Системная проверка доступности внутри песочницы врёт: она отвечала
+    /// «пакета нет» на паре, которой перевод только что работал. Поэтому
+    /// предложение загрузки требует двух условий сразу.
+    func testDownloadIsOfferedOnlyForPairsThatNeverWorked() {
+        XCTAssertTrue(TranslationLanguagePolicy.shouldOfferDownload(systemSaysMissing: true, alreadyWorked: false))
+        XCTAssertFalse(TranslationLanguagePolicy.shouldOfferDownload(systemSaysMissing: true, alreadyWorked: true))
+        XCTAssertFalse(TranslationLanguagePolicy.shouldOfferDownload(systemSaysMissing: false, alreadyWorked: false))
+        XCTAssertEqual(TranslationLanguagePolicy.key(for: (from: "vi", to: "ru")), "vi>ru")
+    }
+
     func testClipboardSensitiveTypesAreIgnored() {
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["org.nspasteboard.TransientType"]))
