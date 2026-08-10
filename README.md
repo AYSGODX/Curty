@@ -6,6 +6,13 @@ Curty — утилита для строки меню macOS, которая жи
 
 Всё работает на самом компьютере. Наружу уходят ровно два запроса, оба описаны ниже.
 
+| | |
+|---|---|
+| **Медиа**<br><img src="docs/screenshots/media.png" width="430" alt="Вкладка «Медиа»"> | **Полка**<br><img src="docs/screenshots/shelf.png" width="430" alt="Вкладка «Полка»"> |
+| **Буфер**<br><img src="docs/screenshots/clipboard.png" width="430" alt="Вкладка «Буфер»"> | **Сниппеты**<br><img src="docs/screenshots/snippets.png" width="430" alt="Вкладка «Сниппеты»"> |
+| **Календарь**<br><img src="docs/screenshots/calendar.png" width="430" alt="Вкладка «Календарь»"> | **Перевод**<br><img src="docs/screenshots/translate.png" width="430" alt="Вкладка «Перевод»"> |
+| **Заметки**<br><img src="docs/screenshots/notes.png" width="430" alt="Вкладка «Заметки»"> | |
+
 ## Что внутри
 
 **Медиа** — что играет в Spotify или Music: обложка, перемотка, громкость плеера. Управляется прямо из шторки, переключаться в приложение не нужно.
