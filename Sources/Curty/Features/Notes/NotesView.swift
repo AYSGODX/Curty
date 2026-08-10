@@ -25,6 +25,28 @@ struct NotesView: View {
         .animation(.easeOut(duration: 0.16), value: store.pendingDeletion)
     }
 
+    /// Появляется только у края: пока до предела далеко, счётчик — лишний шум.
+    @ViewBuilder
+    private func counter(for note: ScratchNote) -> some View {
+        let count = note.text.count
+        if count > NoteStore.counterThreshold {
+            let isOverLimit = count > NoteStore.maxCharacters
+            HStack(spacing: 4) {
+                Spacer(minLength: 0)
+                if isOverLimit {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9))
+                }
+                Text("\(count.formatted(.number)) / \(NoteStore.maxCharacters.formatted(.number))")
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(isOverLimit ? .red : .secondary)
+            .help(isOverLimit
+                  ? "Сверх предела заметка не сохраняется — сократите текст"
+                  : "Предел длины заметки")
+        }
+    }
+
     private func background(for id: UUID) -> Color {
         if store.selectedID == id { return CurtyTheme.accent.opacity(0.16) }
         return hoveredID == id ? .primary.opacity(0.10) : .primary.opacity(0.04)
@@ -95,6 +117,8 @@ struct NotesView: View {
                         .curtyFieldChrome(isFocused: isEditorFocused, cornerRadius: 10)
                         .focused($isEditorFocused)
                         .focusEffectDisabled()
+
+                        counter(for: note)
                     }
                 } else {
                     VStack(spacing: 9) {

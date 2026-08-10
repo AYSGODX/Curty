@@ -53,6 +53,11 @@ final class NoteStore: ObservableObject {
     /// же, иначе скопированная целиком заметка в неё не попадает.
     static let maxCharacters = 250_000
 
+    /// С этого места показывается счётчик. Предел срабатывал молча: текст в
+    /// поле оставался, а сохранён не был, и человек узнавал об этом только по
+    /// красной строке ошибки. Запас в пятьдесят тысяч даёт время заметить.
+    static let counterThreshold = 200_000
+
     func update(_ id: UUID, text: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         guard text.count <= Self.maxCharacters else {

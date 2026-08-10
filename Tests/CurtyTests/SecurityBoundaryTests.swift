@@ -160,6 +160,9 @@ final class SecurityBoundaryTests: XCTestCase {
     @MainActor
     func testClipboardAcceptsEverythingANoteCanHold() {
         XCTAssertGreaterThanOrEqual(ClipboardPolicy.maxTextCharacters, NoteStore.maxCharacters)
+        // Счётчик обязан появляться до предела, а не вместе с ним: иначе он
+        // сообщает о беде, когда сокращать уже поздно.
+        XCTAssertLessThan(NoteStore.counterThreshold, NoteStore.maxCharacters)
     }
 
     @MainActor
