@@ -2,44 +2,6 @@ import AppKit
 import SwiftUI
 import Translation
 
-enum TranslationDirection: Equatable {
-    case russianToEnglish
-    case englishToRussian
-
-    var source: Locale.Language {
-        Locale.Language(identifier: self == .russianToEnglish ? "ru" : "en")
-    }
-
-    var target: Locale.Language {
-        Locale.Language(identifier: self == .russianToEnglish ? "en" : "ru")
-    }
-
-    var sourceTitle: String { self == .russianToEnglish ? "Русский" : "Английский" }
-    var targetTitle: String { self == .russianToEnglish ? "Английский" : "Русский" }
-}
-
-enum TranslationLanguageDetector {
-    static func direction(for text: String) -> TranslationDirection? {
-        var cyrillicCount = 0
-        var latinCount = 0
-
-        for scalar in text.unicodeScalars {
-            switch scalar.value {
-            case 0x0400...0x052F, 0x2DE0...0x2DFF, 0xA640...0xA69F:
-                cyrillicCount += 1
-            case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x024F:
-                latinCount += 1
-            default:
-                continue
-            }
-        }
-
-        guard cyrillicCount > 0 || latinCount > 0 else { return nil }
-        if cyrillicCount == latinCount { return nil }
-        return cyrillicCount > latinCount ? .russianToEnglish : .englishToRussian
-    }
-}
-
 struct TranslateView: View {
     private enum Field: Hashable {
         case source
@@ -47,24 +9,15 @@ struct TranslateView: View {
 
     @ObservedObject var store: TranslateStore
     @State private var configuration: TranslationSession.Configuration?
+    /// Какая пара языков сейчас в сессии. Если та же — сессию не пересоздаём,
+    /// а просим повторить перевод: пересоздание сбрасывает подготовку пакета.
+    @State private var activePair = ""
+    @State private var pendingTranslation: Task<Void, Never>?
     @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(spacing: 9) {
-            HStack {
-                languagePill(store.direction.sourceTitle)
-                Spacer()
-                Button {
-                    swapLanguages()
-                } label: {
-                    Image(systemName: "arrow.left.arrow.right")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Поменять языки")
-                Spacer()
-                languagePill(store.direction.targetTitle)
-            }
+            languageBar
 
             CurtyCard {
                 VStack(spacing: 7) {
@@ -74,41 +27,108 @@ struct TranslateView: View {
                 }
             }
 
-            HStack {
-                Label(statusText, systemImage: statusSymbol)
-                    .font(.caption)
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
-                Spacer()
-                Button { copyTranslation() } label: { Image(systemName: "doc.on.doc") }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .disabled(store.translatedText.isEmpty)
-                    .help("Копировать перевод")
-                    .accessibilityLabel("Копировать перевод")
-                Button("Перевести") { requestTranslation() }
-                    .buttonStyle(CurtyProminentButtonStyle())
-                    .disabled(store.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.status == .translating)
-            }
+            statusBar
         }
-        .onAppear { store.resumeIfInterrupted() }
-        .onChange(of: store.sourceText) { _, newValue in
-            applyDetectedLanguage(for: newValue)
+        .onAppear {
+            store.resumeIfInterrupted()
+            loadSupportedLanguages()
         }
+        // Перевод идёт сам: кнопки «Перевести» нет, набранное переводится через
+        // паузу после последнего нажатия.
+        .onChange(of: store.sourceText) { _, _ in scheduleTranslation() }
+        .onChange(of: store.target) { _, _ in scheduleTranslation(immediately: true) }
+        .onChange(of: store.source) { _, _ in scheduleTranslation(immediately: true) }
         .translationTask(configuration) { session in
-            guard store.status == .translating else { return }
-            let requestedText = store.sourceText
-            let requestedDirection = store.direction
-            do {
-                let response = try await session.translate(requestedText)
-                guard store.sourceText == requestedText, store.direction == requestedDirection else { return }
-                store.translatedText = response.targetText
-                store.status = .complete
-            } catch {
-                store.status = .failed(error.localizedDescription)
+            await translate(with: session)
+        }
+    }
+
+    // MARK: - Языки
+
+    /// Оба списка одной ширины, кнопка обмена — фиксированной: иначе она
+    /// съезжала при каждой смене языка, потому что названия разной длины.
+    private var languageBar: some View {
+        HStack(spacing: 6) {
+            languageMenu(
+                title: sourceTitle,
+                isAutomatic: store.source == .automatic,
+                includesAutomatic: true
+            ) { code in
+                store.source = code.map(TranslationSource.fixed) ?? .automatic
+            }
+
+            CurtyRowButton(
+                systemName: "arrow.left.arrow.right",
+                title: "Поменять языки местами",
+                size: 26,
+                glyphSize: 12,
+                isEnabled: store.resolvedSource != nil
+            ) {
+                withAnimation(.easeOut(duration: 0.16)) { store.swapLanguages() }
+            }
+            .frame(width: 26)
+
+            languageMenu(
+                title: TranslationLanguagePolicy.title(for: store.target),
+                isAutomatic: false,
+                includesAutomatic: false
+            ) { code in
+                if let code { store.target = code }
             }
         }
     }
+
+    private var sourceTitle: String {
+        switch store.source {
+        case .fixed(let code): return TranslationLanguagePolicy.title(for: code)
+        case .automatic:
+            guard let detected = store.detected else { return "Определить язык" }
+            return TranslationLanguagePolicy.title(for: detected)
+        }
+    }
+
+    private func languageMenu(
+        title: String,
+        isAutomatic: Bool,
+        includesAutomatic: Bool,
+        select: @escaping (String?) -> Void
+    ) -> some View {
+        Menu {
+            if includesAutomatic {
+                Button("Определить язык") { select(nil) }
+                Divider()
+            }
+            ForEach(store.supported, id: \.self) { code in
+                Button(TranslationLanguagePolicy.title(for: code)) { select(code) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if isAutomatic {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9))
+                        .foregroundStyle(CurtyTheme.accent)
+                }
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(.primary.opacity(0.06), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .curtyHoverLift(scale: 1.03)
+        .help(isAutomatic ? "Язык определяется по тексту" : "Выбрать язык")
+    }
+
+    // MARK: - Поля
 
     private var sourceEditor: some View {
         let isFloating = focusedField == .source || !store.sourceText.isEmpty
@@ -152,21 +172,90 @@ struct TranslateView: View {
         .frame(height: 62)
     }
 
-    private func applyDetectedLanguage(for text: String) {
-        var changed = false
-        withAnimation(.easeOut(duration: 0.16)) {
-            changed = store.applyDetectedLanguage(for: text)
+    private var statusBar: some View {
+        HStack {
+            Label(statusText, systemImage: statusSymbol)
+                .font(.caption)
+                .foregroundStyle(statusColor)
+                .lineLimit(1)
+            Spacer()
+            CurtyRowButton(
+                systemName: "doc.on.doc",
+                title: "Копировать перевод",
+                size: 24,
+                glyphSize: 12,
+                isEnabled: !store.translatedText.isEmpty,
+                confirmsWith: "checkmark"
+            ) { copyTranslation() }
         }
-        if changed { configuration = nil }
     }
 
-    private func requestTranslation() {
-        applyDetectedLanguage(for: store.sourceText)
-        store.status = .translating
-        if configuration == nil {
-            configuration = TranslationSession.Configuration(source: store.direction.source, target: store.direction.target)
-        } else {
+    // MARK: - Перевод
+
+    private func loadSupportedLanguages() {
+        guard store.supported.isEmpty else { return }
+        Task {
+            let codes = await LanguageAvailability().supportedLanguages
+                .compactMap { $0.languageCode?.identifier }
+            store.loadSupportedLanguages(codes)
+        }
+    }
+
+    /// Пауза перед переводом: иначе каждая буква поднимала бы сессию заново.
+    /// Смена языка руками — случай другой, там ждать нечего.
+    private func scheduleTranslation(immediately: Bool = false) {
+        pendingTranslation?.cancel()
+
+        guard !store.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            store.clearResult()
+            return
+        }
+
+        pendingTranslation = Task {
+            if !immediately {
+                try? await Task.sleep(for: .milliseconds(450))
+            }
+            guard !Task.isCancelled else { return }
+            store.detectLanguage()
+            startSession()
+        }
+    }
+
+    private func startSession() {
+        guard let pair = store.pair else {
+            store.noteNothingToDo()
+            return
+        }
+
+        let key = "\(pair.from)>\(pair.to)"
+        if key == activePair, configuration != nil {
             configuration?.invalidate()
+        } else {
+            activePair = key
+            configuration = TranslationSession.Configuration(
+                source: Locale.Language(identifier: pair.from),
+                target: Locale.Language(identifier: pair.to)
+            )
+        }
+    }
+
+    private func translate(with session: TranslationSession) async {
+        let requested = store.sourceText
+        guard !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        store.status = .translating
+
+        do {
+            // Языковой пакет качается по требованию, и до первого перевода его
+            // нет ни для одной пары — даже для русско-английской. Система
+            // спросит и скачает сама; для уже скачанной пары это ничего не стоит.
+            try await session.prepareTranslation()
+            let response = try await session.translate(requested)
+            // Пока переводили, текст мог смениться — тогда ответ уже не про него.
+            guard store.sourceText == requested else { return }
+            store.translatedText = response.targetText
+            store.status = .complete
+        } catch {
+            store.status = .failed(error.localizedDescription)
         }
     }
 
@@ -175,25 +264,13 @@ struct TranslateView: View {
         InternalPasteboard.write { $0.setString(store.translatedText, forType: .string) }
     }
 
-    private func swapLanguages() {
-        store.swapLanguages()
-        configuration = nil
-    }
-
-    private func languagePill(_ title: String) -> some View {
-        Text(title)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.primary.opacity(0.06), in: Capsule())
-    }
-
     private var statusText: String {
         switch store.status {
-        case .idle: "Язык определяется автоматически"
+        case .idle: "Перевод появится сам"
         case .translating: "Переводим…"
         case .complete: "Готово"
         case .failed(let message): message
+        case .nothingToDo(let message): message
         }
     }
 
@@ -203,6 +280,7 @@ struct TranslateView: View {
         case .translating: "ellipsis.circle"
         case .complete: "checkmark.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
+        case .nothingToDo: "info.circle"
         }
     }
 
@@ -212,6 +290,7 @@ struct TranslateView: View {
         case .translating: CurtyTheme.accent
         case .complete: CurtyTheme.success
         case .failed: .red
+        case .nothingToDo: .secondary
         }
     }
 }

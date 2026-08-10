@@ -311,10 +311,19 @@ final class SecurityBoundaryTests: XCTestCase {
     }
 
     func testTranslationLanguageDetection() {
-        XCTAssertEqual(TranslationLanguageDetector.direction(for: "Hello, how are you?"), .englishToRussian)
-        XCTAssertEqual(TranslationLanguageDetector.direction(for: "Привет, как дела?"), .russianToEnglish)
-        XCTAssertEqual(TranslationLanguageDetector.direction(for: "hello привет hello"), .englishToRussian)
-        XCTAssertNil(TranslationLanguageDetector.direction(for: "12345 — !"))
+        // Определение по содержимому, а не по алфавиту: вьетнамский и
+        // английский пишутся одними буквами, и прежний счётчик кириллицы
+        // против латиницы записывал вьетнамский в английский.
+        XCTAssertEqual(TranslationLanguagePolicy.detect("Xin chào, bạn khỏe không?"), "vi")
+        XCTAssertEqual(TranslationLanguagePolicy.detect("Привет, как дела?"), "ru")
+        XCTAssertEqual(TranslationLanguagePolicy.detect("Guten Morgen, wie geht es dir?"), "de")
+        // На двух символах гадать бессмысленно.
+        XCTAssertNil(TranslationLanguagePolicy.detect("ok"))
+
+        // Переводить нечего, если язык не определён или совпадает с целевым.
+        XCTAssertNil(TranslationLanguagePolicy.pair(source: nil, target: "ru"))
+        XCTAssertNil(TranslationLanguagePolicy.pair(source: "ru", target: "ru"))
+        XCTAssertEqual(TranslationLanguagePolicy.pair(source: "vi", target: "ru")?.from, "vi")
     }
 
     func testPanelActivationZoneAndCloseTiming() {

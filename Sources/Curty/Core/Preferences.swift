@@ -67,6 +67,8 @@ final class Preferences: ObservableObject {
         static let displayTimeZone = "layout.displayTimeZone"
         static let calendarWasGranted = "calendar.wasGranted"
         static let launchAtLoginAsked = "app.launchAtLoginAsked"
+        static let translateSource = "translate.source"
+        static let translateTarget = "translate.target"
     }
 
     private let defaults: UserDefaults
@@ -88,6 +90,15 @@ final class Preferences: ObservableObject {
     /// шторка не раскрывается: курсор к верхней кромке там ходит по делу.
     @Published var respectFullScreenEnabled: Bool {
         didSet { defaults.set(respectFullScreenEnabled, forKey: Key.respectFullScreen) }
+    }
+
+    /// Языки переводчика. Пустой источник — «определять по тексту».
+    @Published var translateSourceCode: String {
+        didSet { defaults.set(translateSourceCode, forKey: Key.translateSource) }
+    }
+
+    @Published var translateTargetCode: String {
+        didSet { defaults.set(translateTargetCode, forKey: Key.translateTarget) }
     }
 
     /// Про автозапуск уже спрашивали. Прописываться в объекты входа без спроса
@@ -154,6 +165,12 @@ final class Preferences: ObservableObject {
         displayTimeZoneIdentifier = defaults.string(forKey: Key.displayTimeZone) ?? ""
         calendarAccessWasGranted = defaults.bool(forKey: Key.calendarWasGranted)
         launchAtLoginAsked = defaults.bool(forKey: Key.launchAtLoginAsked)
+        translateSourceCode = defaults.string(forKey: Key.translateSource) ?? ""
+        // По умолчанию переводим на язык системы: чаще всего человек вставляет
+        // чужой текст, чтобы прочитать его на своём.
+        translateTargetCode = defaults.string(forKey: Key.translateTarget)
+            ?? Locale.current.language.languageCode?.identifier
+            ?? "en"
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }

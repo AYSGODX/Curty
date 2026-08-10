@@ -107,7 +107,7 @@ final class AppModel: ObservableObject {
     let calendar: CalendarStore
     let media: MediaStore
     let updates: UpdateChecker
-    let translate = TranslateStore()
+    let translate: TranslateStore
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -121,6 +121,7 @@ final class AppModel: ObservableObject {
         calendar = CalendarStore()
         media = MediaStore()
         updates = UpdateChecker()
+        translate = TranslateStore(preferences: preferences)
 
         preferences.$clipboardMonitoringEnabled
             .removeDuplicates()
