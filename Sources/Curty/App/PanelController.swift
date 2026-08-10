@@ -374,7 +374,15 @@ final class PanelController {
         )
 
         if activation.contains(point) {
-            if !model.isPanelOpen, isActivationSuppressed(on: screen) { return }
+            if isActivationSuppressed(on: screen) {
+                // Проверка нужна и при открытой панели. Свайп к Mission Control
+                // и движение курсора идут одновременно, а окна появляются не
+                // мгновенно: панель успевала раскрыться за долю секунды до
+                // того, как её было чем остановить, — и дальше висела поверх
+                // всего. Теперь она уходит, как только помеха обнаружена.
+                if model.isPanelOpen { close() }
+                return
+            }
             open()
             return
         }
@@ -403,7 +411,10 @@ final class PanelController {
     /// suppressed hover.
     private func isActivationSuppressed(on screen: NSScreen) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
-        if now - overlayCheckedAt < 0.2 { return overlayWasVisible }
+        // Кэш короткий: он бережёт от лишних обходов списка окон, но за время
+        // его жизни Mission Control успевает открыться, а ответ остаётся
+        // прежним. Чем короче, тем меньше окно, в которое панель проскакивает.
+        if now - overlayCheckedAt < 0.1 { return overlayWasVisible }
         overlayCheckedAt = now
 
         if model.preferences.respectFullScreenEnabled,
