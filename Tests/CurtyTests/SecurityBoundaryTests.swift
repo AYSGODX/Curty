@@ -157,6 +157,17 @@ final class SecurityBoundaryTests: XCTestCase {
 
     /// Два предела уже разъезжались: заметка допускала вдвое больше, чем
     /// принимала история, и скопированная целиком заметка молча пропадала.
+    /// Вопрос про автозапуск задаётся один раз и только по делу. Повторяющийся
+    /// вопрос раздражает сильнее, чем отсутствие автозапуска.
+    func testLaunchAtLoginIsAskedOnceAndOnlyWhenUseful() {
+        XCTAssertTrue(LaunchAtLoginPolicy.shouldAsk(alreadyAsked: false, isEnabled: false, canChange: true))
+        XCTAssertFalse(LaunchAtLoginPolicy.shouldAsk(alreadyAsked: true, isEnabled: false, canChange: true))
+        // Уже включён — спрашивать не о чем.
+        XCTAssertFalse(LaunchAtLoginPolicy.shouldAsk(alreadyAsked: false, isEnabled: true, canChange: true))
+        // Включить нельзя — вопрос был бы издевательством.
+        XCTAssertFalse(LaunchAtLoginPolicy.shouldAsk(alreadyAsked: false, isEnabled: false, canChange: false))
+    }
+
     @MainActor
     func testClipboardAcceptsEverythingANoteCanHold() {
         XCTAssertGreaterThanOrEqual(ClipboardPolicy.maxTextCharacters, NoteStore.maxCharacters)

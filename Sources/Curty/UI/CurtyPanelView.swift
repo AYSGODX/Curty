@@ -24,6 +24,12 @@ struct PanelRootView: View {
             toolRail
             VStack(spacing: 0) {
                 header
+                if model.preferences.shouldAskAboutLaunchAtLogin {
+                    launchAtLoginPrompt
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                        .transition(.opacity)
+                }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -238,6 +244,44 @@ struct PanelRootView: View {
         .background(colorScheme == .dark ? CurtyTheme.darkRail : Color.black.opacity(0.035))
         .overlay(alignment: .trailing) {
             Rectangle().fill(.primary.opacity(0.07)).frame(width: 1)
+        }
+    }
+
+    /// Спрашивается один раз, при первом раскрытии шторки. Всплывающее окно
+    /// при входе в систему было бы ровно тем, чего от фонового приложения не
+    /// ждут, а карточка в панели попадается на глаза тогда, когда человек сам
+    /// пришёл к Curty.
+    private var launchAtLoginPrompt: some View {
+        CurtyCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Запускать Curty при входе в систему?")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("После перезагрузки она не вернётся сама, а найти её через поиск macOS не даст: приложения без окна она не показывает.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button("Запускать") {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            model.preferences.setLaunchAtLogin(enabled: true)
+                        }
+                    }
+                    .buttonStyle(CurtyProminentButtonStyle())
+                    .curtyHoverLift()
+
+                    Button("Не нужно") {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            model.preferences.launchAtLoginAsked = true
+                        }
+                    }
+                    .buttonStyle(CurtySecondaryButtonStyle())
+                    .curtyHoverLift()
+
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

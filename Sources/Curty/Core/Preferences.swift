@@ -18,6 +18,12 @@ enum LaunchAtLoginState: Equatable {
 }
 
 enum LaunchAtLoginPolicy {
+    /// Спрашиваем ровно один раз и только когда есть о чём: если автозапуск уже
+    /// включён или включить его на этой машине нельзя, вопрос лишний.
+    static func shouldAsk(alreadyAsked: Bool, isEnabled: Bool, canChange: Bool) -> Bool {
+        !alreadyAsked && !isEnabled && canChange
+    }
+
     static func isInApplicationsFolder(
         bundleURL: URL,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -60,6 +66,7 @@ final class Preferences: ObservableObject {
         static let respectFullScreen = "layout.respectFullScreen"
         static let displayTimeZone = "layout.displayTimeZone"
         static let calendarWasGranted = "calendar.wasGranted"
+        static let launchAtLoginAsked = "app.launchAtLoginAsked"
     }
 
     private let defaults: UserDefaults
@@ -81,6 +88,14 @@ final class Preferences: ObservableObject {
     /// шторка не раскрывается: курсор к верхней кромке там ходит по делу.
     @Published var respectFullScreenEnabled: Bool {
         didSet { defaults.set(respectFullScreenEnabled, forKey: Key.respectFullScreen) }
+    }
+
+    /// Про автозапуск уже спрашивали. Прописываться в объекты входа без спроса
+    /// невежливо, а молчать — значит оставить человека после перезагрузки без
+    /// приложения, которое macOS даже не показывает в поиске: приложения-агенты
+    /// она не индексирует. Поэтому спрашиваем ровно один раз.
+    @Published var launchAtLoginAsked: Bool {
+        didSet { defaults.set(launchAtLoginAsked, forKey: Key.launchAtLoginAsked) }
     }
 
     /// Доступ к календарю однажды выдавали. Нужно, чтобы отличить «ещё не
@@ -138,11 +153,24 @@ final class Preferences: ObservableObject {
         respectFullScreenEnabled = defaults.bool(forKey: Key.respectFullScreen)
         displayTimeZoneIdentifier = defaults.string(forKey: Key.displayTimeZone) ?? ""
         calendarAccessWasGranted = defaults.bool(forKey: Key.calendarWasGranted)
+        launchAtLoginAsked = defaults.bool(forKey: Key.launchAtLoginAsked)
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
         refreshLaunchAtLogin()
     }
 
+    /// Спрашивать больше не о чем, если человек уже включил автозапуск сам,
+    /// если ответил на вопрос, или если включить его на этой машине нельзя.
+    var shouldAskAboutLaunchAtLogin: Bool {
+        LaunchAtLoginPolicy.shouldAsk(
+            alreadyAsked: launchAtLoginAsked,
+            isEnabled: launchAtLoginEnabled,
+            canChange: canChangeLaunchAtLogin
+        )
+    }
+
     func setLaunchAtLogin(enabled: Bool) {
+        // Переключили руками — ответ получен, спрашивать незачем.
+        launchAtLoginAsked = true
         launchAtLoginMessage = nil
 
         if enabled,
