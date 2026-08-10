@@ -60,7 +60,12 @@ final class NoteStore: ObservableObject {
 
     func update(_ id: UUID, text: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        guard text.count <= Self.maxCharacters else {
+        // Проверка идёт на каждое нажатие клавиши, а text.count обходит строку
+        // целиком — на четверти миллиона знаков это полтора миллисекунды.
+        // Длину в байтах Swift знает сразу, и один символ занимает минимум один
+        // байт: пока байт меньше предела, знаков тем более меньше, и обходить
+        // строку незачем.
+        if text.utf8.count > Self.maxCharacters, text.count > Self.maxCharacters {
             lastError = "Заметка длиннее \(Self.maxCharacters) символов не сохраняется."
             return
         }

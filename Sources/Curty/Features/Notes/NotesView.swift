@@ -26,10 +26,12 @@ struct NotesView: View {
     }
 
     /// Появляется только у края: пока до предела далеко, счётчик — лишний шум.
+    /// Отбор идёт по длине в байтах — она известна сразу, тогда как подсчёт
+    /// символов обходит строку целиком и повторялся бы на каждое нажатие.
     @ViewBuilder
     private func counter(for note: ScratchNote) -> some View {
-        let count = note.text.count
-        if count > NoteStore.counterThreshold {
+        if note.text.utf8.count > NoteStore.counterThreshold {
+            let count = note.text.count
             let isOverLimit = count > NoteStore.maxCharacters
             HStack(spacing: 4) {
                 Spacer(minLength: 0)
