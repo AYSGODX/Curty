@@ -2,6 +2,8 @@ import SwiftUI
 
 struct NotesView: View {
     @ObservedObject var store: NoteStore
+    @State private var hoveredID: UUID?
+    @FocusState private var isEditorFocused: Bool
 
     private var selectedNote: ScratchNote? {
         store.items.first { $0.id == store.selectedID }
@@ -23,6 +25,11 @@ struct NotesView: View {
         .animation(.easeOut(duration: 0.16), value: store.pendingDeletion)
     }
 
+    private func background(for id: UUID) -> Color {
+        if store.selectedID == id { return CurtyTheme.accent.opacity(0.16) }
+        return hoveredID == id ? .primary.opacity(0.10) : .primary.opacity(0.04)
+    }
+
     private var content: some View {
         HStack(spacing: 10) {
             VStack(spacing: 8) {
@@ -30,6 +37,7 @@ struct NotesView: View {
                     Label("Новая", systemImage: "plus")
                 }
                 .buttonStyle(CurtyProminentButtonStyle())
+                .curtyHoverLift(scale: 1.04)
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(store.items) { note in
@@ -41,12 +49,18 @@ struct NotesView: View {
                                     .lineLimit(2)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(8)
-                                    .background(
-                                        store.selectedID == note.id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 9)
-                                    )
+                                    .background(background(for: note.id), in: RoundedRectangle(cornerRadius: 9))
                             }
                             .buttonStyle(.plain)
+                            .onHover { hovering in
+                                withAnimation(.easeOut(duration: 0.12)) {
+                                    if hovering {
+                                        hoveredID = note.id
+                                    } else if hoveredID == note.id {
+                                        hoveredID = nil
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -60,18 +74,27 @@ struct NotesView: View {
                             Text("Быстрая заметка")
                                 .font(.system(size: 13, weight: .semibold))
                             Spacer()
-                            Button { store.remove(note) } label: { Image(systemName: "trash") }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                .help("Удалить заметку")
+                            CurtyRowButton(
+                                systemName: "trash",
+                                title: "Удалить заметку",
+                                isDestructive: true,
+                                size: CurtyTheme.rowActionSize,
+                                glyphSize: 13
+                            ) { store.remove(note) }
                         }
                         TextEditor(text: Binding(
                             get: { note.text },
                             set: { store.update(note.id, text: $0) }
                         ))
                         .font(.system(size: 13))
+                        // Своя подложка вместо системной, иначе внутри рамки
+                        // остаётся прямоугольник чужого цвета.
                         .scrollContentBackground(.hidden)
+                        .padding(6)
                         .frame(minHeight: 132)
+                        .curtyFieldChrome(isFocused: isEditorFocused, cornerRadius: 10)
+                        .focused($isEditorFocused)
+                        .focusEffectDisabled()
                     }
                 } else {
                     VStack(spacing: 9) {
