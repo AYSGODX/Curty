@@ -311,7 +311,7 @@ struct PanelRootView: View {
             switch model.selectedTool {
             case .media: MediaView(store: model.media, preferences: model.preferences)
             case .shelf: ShelfView(store: model.shelf, model: model)
-            case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences)
+            case .clipboard: ClipboardView(store: model.clipboard, preferences: model.preferences, model: model)
             case .snippets: SnippetsView(store: model.snippets, model: model)
             case .calendar: CalendarView(store: model.calendar, preferences: model.preferences) { model.requestPanelClose() }
             case .translate: TranslateView(store: model.translate) { model.requestPanelClose() }

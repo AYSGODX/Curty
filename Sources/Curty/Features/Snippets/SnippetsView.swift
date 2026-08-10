@@ -143,6 +143,11 @@ struct SnippetsView: View {
             model.isPresentingEditor = isPresenting
         }
         .onDisappear { model.isPresentingEditor = false }
+        // Шторка закрылась — выделение теряет смысл: фокус ушёл, и при
+        // следующем раскрытии подсвеченная строка обещает то, чего нет.
+        .onChange(of: model.isPanelOpen) { _, isOpen in
+            if !isOpen { selectedID = nil }
+        }
         .sheet(item: $draft) { target in
             SnippetEditor(
                 heading: target.source == nil ? "Новый сниппет" : "Изменить сниппет",

@@ -3,6 +3,7 @@ import SwiftUI
 struct ClipboardView: View {
     @ObservedObject var store: ClipboardStore
     @ObservedObject var preferences: Preferences
+    @ObservedObject var model: AppModel
     @State private var isConfirmingClear = false
     @State private var selectedID: UUID?
     @State private var copyConfirmation: RowCopyConfirmation?
@@ -152,6 +153,11 @@ struct ClipboardView: View {
                 .disabled(selectedEntry == nil)
                 .opacity(0)
                 .accessibilityHidden(true)
+        }
+        // Шторка закрылась — выделение теряет смысл: фокус ушёл, и при
+        // следующем раскрытии подсвеченная строка обещает то, чего нет.
+        .onChange(of: model.isPanelOpen) { _, isOpen in
+            if !isOpen { selectedID = nil }
         }
         .confirmationDialog(
             "Очистить историю буфера?",

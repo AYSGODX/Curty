@@ -114,6 +114,11 @@ struct ShelfView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         }
+        // Шторка закрылась — выделение теряет смысл: фокус ушёл, и при
+        // следующем раскрытии подсвеченная строка обещает то, чего нет.
+        .onChange(of: model.isPanelOpen) { _, isOpen in
+            if !isOpen { selectedID = nil }
+        }
         .confirmationDialog(
             "Убрать все файлы с полки?",
             isPresented: $isConfirmingClear
