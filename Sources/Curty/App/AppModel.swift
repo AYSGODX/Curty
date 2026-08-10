@@ -175,6 +175,13 @@ final class AppModel: ObservableObject {
             .sink { [weak preferences] _ in preferences?.calendarAccessWasGranted = true }
             .store(in: &cancellables)
 
+        // Текст, оказавшийся в переводчике, вычёркиваем из истории: его
+        // копировали как средство, а не как содержимое, которое нужно хранить.
+        translate.$sourceText
+            .removeDuplicates()
+            .sink { [weak clipboard] text in clipboard?.forgetText(text) }
+            .store(in: &cancellables)
+
         clipboard.onImageSaved = { [weak shelf] url in shelf?.addOwnedFile(url) }
         calendar.onPermissionPromptChange = { [weak self] isPresenting in
             self?.isPresentingDialog = isPresenting

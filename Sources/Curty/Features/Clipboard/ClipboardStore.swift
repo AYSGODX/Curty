@@ -53,6 +53,18 @@ enum ClipboardPolicy {
         "com.agilebits.onepassword",
     ]
 
+    /// Текст, попавший в переводчик, в истории только мешает: его копировали,
+    /// чтобы прочитать, а не чтобы хранить. Сравниваем по содержимому без
+    /// краевых пробелов — вставка часто приносит их с собой.
+    static func removingText(_ text: String, from entries: [ClipboardEntry]) -> [ClipboardEntry] {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return entries }
+        return entries.filter { entry in
+            guard case .text(let value) = entry.payload else { return true }
+            return value.trimmingCharacters(in: .whitespacesAndNewlines) != needle
+        }
+    }
+
     static func shouldIgnore(typeNames: [String]) -> Bool {
         !ignoredTypeNames.isDisjoint(with: typeNames)
     }
@@ -157,6 +169,14 @@ final class ClipboardStore: ObservableObject {
     }
 
     func clear() { entries.removeAll() }
+
+    /// Системный буфер при этом не трогаем: текст там остаётся, и вставить его
+    /// в другое место по-прежнему можно. Убираем только строку из истории.
+    func forgetText(_ text: String) {
+        let remaining = ClipboardPolicy.removingText(text, from: entries)
+        guard remaining.count != entries.count else { return }
+        entries = remaining
+    }
 
     func remove(_ entry: ClipboardEntry) { entries.removeAll { $0.id == entry.id } }
 

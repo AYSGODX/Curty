@@ -31,6 +31,24 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(board.string(forType: .string), "из Curty")
     }
 
+    func testTextTakenToTheTranslatorLeavesTheHistory() {
+        let entries: [ClipboardEntry] = [
+            .init(payload: .text("Xin chào"), capturedAt: Date()),
+            .init(payload: .text("другое"), capturedAt: Date()),
+            .init(payload: .file(URL(fileURLWithPath: "/tmp/файл")), capturedAt: Date()),
+        ]
+
+        // Краевые пробелы вставка часто приносит с собой — они не должны мешать.
+        let left = ClipboardPolicy.removingText("  Xin chào\n", from: entries)
+        XCTAssertEqual(left.count, 2)
+        XCTAssertFalse(left.contains { if case .text(let value) = $0.payload { return value == "Xin chào" } else { return false } })
+
+        // Пустой текст ничего не вычёркивает: иначе очистка поля стирала бы историю.
+        XCTAssertEqual(ClipboardPolicy.removingText("   ", from: entries).count, 3)
+        // Файлы и картинки правило не трогает.
+        XCTAssertEqual(ClipboardPolicy.removingText("/tmp/файл", from: entries).count, 3)
+    }
+
     func testClipboardSensitiveTypesAreIgnored() {
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
         XCTAssertTrue(ClipboardPolicy.shouldIgnore(typeNames: ["org.nspasteboard.TransientType"]))
