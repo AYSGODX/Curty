@@ -148,9 +148,9 @@ struct TranslateView: View {
     private var downloadCard: some View {
         CurtyCard {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Языки перевода не загружены")
+                Text(missingTitle)
                     .font(.system(size: 12, weight: .medium))
-                Text("Перевод работает без интернета, но словари для этого нужно один раз скачать. Около 150 МБ на группу родственных языков — русский, английский, польский и украинский приезжают вместе.")
+                Text("Перевод работает без интернета, но словарь для этого нужно один раз скачать. Родственные языки приезжают одной группой — около 150 МБ.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -161,6 +161,11 @@ struct TranslateView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var missingTitle: String {
+        guard let code = store.missingLanguage else { return "Язык перевода не загружен" }
+        return "Язык «\(TranslationLanguagePolicy.title(for: code))» не загружен"
     }
 
     // MARK: - Поля
@@ -252,7 +257,10 @@ struct TranslateView: View {
                 from: Locale.Language(identifier: pair.from),
                 to: Locale.Language(identifier: pair.to)
             )
-            store.needsDownload = status == .supported
+            // Называем именно тот язык, которого не хватает: пара может быть
+            // любой, а «языки не загружены» после уже сделанной загрузки
+            // читается как «всё стёрлось».
+            store.missingLanguage = status == .supported ? pair.from : nil
         }
     }
 
@@ -329,6 +337,10 @@ struct TranslateView: View {
             guard store.sourceText == requested else { return }
             store.translatedText = response.targetText
             store.status = .complete
+            // Перевод получился — значит словарь на месте, что бы ни отвечала
+            // проверка доступности. Ей веры меньше, чем состоявшемуся переводу:
+            // сразу после запуска она успевает соврать.
+            store.missingLanguage = nil
         } catch {
             store.status = .failed(error.localizedDescription)
         }

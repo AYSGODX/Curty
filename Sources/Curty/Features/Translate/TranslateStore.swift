@@ -63,11 +63,13 @@ final class TranslateStore: ObservableObject {
     @Published var status: Status = .idle
     @Published private(set) var detected: String?
     @Published private(set) var supported: [String] = []
-    /// Языковой пакет для текущей пары не загружен. Система всегда спрашивает
-    /// разрешения на загрузку, и лучше спросить при заходе во вкладку, чем
-    /// посреди набора текста.
-    @Published var needsDownload = false
+    /// Язык, которого не хватает для текущей пары, — не просто признак «чего-то
+    /// нет». Карточка обязана назвать его: сообщение «языки не загружены» после
+    /// того, как человек уже что-то скачал, читается как «всё стёрлось».
+    @Published var missingLanguage: String?
     @Published var isDownloading = false
+
+    var needsDownload: Bool { missingLanguage != nil }
 
     @Published var source: TranslationSource {
         didSet {
