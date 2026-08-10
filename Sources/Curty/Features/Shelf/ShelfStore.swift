@@ -141,9 +141,30 @@ final class ShelfStore: ObservableObject {
     /// Puts the file itself on the pasteboard, so pasting in Finder produces a
     /// copy of it rather than a line of text with its path.
     func copy(_ item: ShelfItem) {
-        withAccess(to: item) { url in
-            InternalPasteboard.write { $0.writeObjects([url as NSURL]) }
+        copy([item])
+    }
+
+    /// Несколько файлов кладутся в буфер одной записью: вставка в Finder
+    /// принесёт их все разом. Доступ открывается сразу ко всем и держится до
+    /// конца записи — иначе к моменту вставки часть ссылок уже закрыта.
+    func copy(_ items: [ShelfItem]) {
+        let available = items.filter(\.isAvailable)
+        guard !available.isEmpty else { return }
+
+        var opened: [URL] = []
+        defer { opened.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+        var urls: [NSURL] = []
+        for item in available {
+            guard let url = item.url else { continue }
+            if case .securityScopedBookmark = item.location, url.startAccessingSecurityScopedResource() {
+                opened.append(url)
+            }
+            urls.append(url as NSURL)
         }
+
+        guard !urls.isEmpty else { return }
+        InternalPasteboard.write { $0.writeObjects(urls) }
     }
 
     private func resolve(_ stored: StoredShelfItem) -> ShelfItem {

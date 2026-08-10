@@ -6,7 +6,9 @@ struct ShelfView: View {
     @ObservedObject var model: AppModel
     @State private var pendingExecutable: ShelfItem?
     @State private var isConfirmingClear = false
-    @State private var selectedID: UUID?
+    /// Выделение множественное: ⌘-клик добавляет и убирает, обычный клик
+    /// оставляет один элемент.
+    @State private var selection: Set<UUID> = []
     /// Какую кнопку копирования подсветить галочкой после ⌘C и каким разом:
     /// повторное нажатие по тому же файлу должно подтверждаться заново.
     @State private var copyConfirmation: RowCopyConfirmation?
@@ -22,7 +24,9 @@ struct ShelfView: View {
                     .buttonStyle(CurtyProminentButtonStyle())
                     .curtyHoverLift()
 
-                Text("Элементов: \(store.items.count)")
+                Text(selection.count > 1
+                     ? "Выбрано: \(selection.count)"
+                     : "Элементов: \(store.items.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -97,7 +101,7 @@ struct ShelfView: View {
         // Space previews the selected file and closes the preview again, the
         // way it behaves in Finder.
         .onKeyPress(.space) {
-            guard let item = store.items.first(where: { $0.id == selectedID }) else { return .ignored }
+            guard let item = selectedItems.first else { return .ignored }
             quickLook(item)
             return .handled
         }
@@ -108,16 +112,16 @@ struct ShelfView: View {
         // живёт только пока открыта полка, поэтому ⌘C в других вкладках
         // по-прежнему достаётся полям ввода.
         .background {
-            Button("Копировать выделенный файл") { copySelected() }
+            Button("Копировать выделенные файлы") { copySelected() }
                 .keyboardShortcut("c", modifiers: .command)
-                .disabled(selectedItem == nil)
+                .disabled(selectedItems.isEmpty)
                 .opacity(0)
                 .accessibilityHidden(true)
         }
         // Шторка закрылась — выделение теряет смысл: фокус ушёл, и при
         // следующем раскрытии подсвеченная строка обещает то, чего нет.
         .onChange(of: model.isPanelOpen) { _, isOpen in
-            if !isOpen { selectedID = nil }
+            if !isOpen { selection = [] }
         }
         .confirmationDialog(
             "Убрать все файлы с полки?",
@@ -157,7 +161,7 @@ struct ShelfView: View {
     /// обратно — и она снова заработает. Убрать её может только пользователь.
     @ViewBuilder
     private func row(for item: ShelfItem) -> some View {
-        let isSelected = selectedID == item.id
+        let isSelected = selection.contains(item.id)
 
         HStack(spacing: 10) {
             Image(systemName: rowIcon(for: item))
@@ -194,12 +198,25 @@ struct ShelfView: View {
         // it was not the first half of one.
         .simultaneousGesture(
             TapGesture().onEnded {
-                selectedID = item.id
+                // Модификатор читаем у системы, а не отдельным жестом: два
+                // жеста на одно нажатие срабатывают непредсказуемо, какой
+                // первым — зависит от версии SwiftUI.
+                if NSEvent.modifierFlags.contains(.command) {
+                    if selection.contains(item.id) {
+                        selection.remove(item.id)
+                    } else {
+                        selection.insert(item.id)
+                    }
+                } else {
+                    selection = [item.id]
+                }
                 isListFocused = true
             }
         )
         .onDrag {
-            selectedID = item.id
+            // Выделение не трогаем: перетаскивание одной строки не должно
+            // сбрасывать отмеченные рядом.
+            if !selection.contains(item.id) { selection = [item.id] }
             // Перетаскивать нечего, пока файл недоступен: пустой провайдер
             // честнее, чем ссылка в никуда.
             guard let url = item.url else { return NSItemProvider() }
@@ -207,14 +224,17 @@ struct ShelfView: View {
         }
     }
 
-    private var selectedItem: ShelfItem? {
-        store.items.first { $0.id == selectedID && $0.isAvailable }
+    private var selectedItems: [ShelfItem] {
+        store.items.filter { selection.contains($0.id) && $0.isAvailable }
     }
 
     private func copySelected() {
-        guard let item = selectedItem else { return }
-        store.copy(item)
-        copyConfirmation = RowCopyConfirmation(item.id)
+        let items = selectedItems
+        guard !items.isEmpty else { return }
+        store.copy(items)
+        // Галочка загорается на первой строке выделения: подтверждать нужно
+        // сам факт, а мигать всеми строками разом — рябь.
+        copyConfirmation = RowCopyConfirmation(items[0].id)
     }
 
     private func rowIcon(for item: ShelfItem) -> String {
@@ -269,7 +289,7 @@ struct ShelfView: View {
     }
 
     private func rowBackground(for item: ShelfItem) -> Color {
-        selectedID == item.id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
+        selection.contains(item.id) ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
     }
 
     /// Finder comes forward as a result of this, so the panel gets out of the
