@@ -29,6 +29,12 @@ enum TranslationLanguagePolicy {
         return (source, target)
     }
 
+    /// Пара для предварительной загрузки. Пока текста нет, определять нечего,
+    /// а самый частый случай — прочитать чужое на своём языке.
+    static func warmupPair(target: String) -> (from: String, to: String) {
+        target == "en" ? ("ru", "en") : ("en", target)
+    }
+
     static func title(for code: String) -> String {
         Locale.current.localizedString(forLanguageCode: code)?.localizedCapitalized ?? code.uppercased()
     }
@@ -57,6 +63,11 @@ final class TranslateStore: ObservableObject {
     @Published var status: Status = .idle
     @Published private(set) var detected: String?
     @Published private(set) var supported: [String] = []
+    /// Языковой пакет для текущей пары не загружен. Система всегда спрашивает
+    /// разрешения на загрузку, и лучше спросить при заходе во вкладку, чем
+    /// посреди набора текста.
+    @Published var needsDownload = false
+    @Published var isDownloading = false
 
     @Published var source: TranslationSource {
         didSet {

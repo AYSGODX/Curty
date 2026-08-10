@@ -16,11 +16,15 @@ struct TranslateView: View {
     /// а просим повторить перевод: пересоздание сбрасывает подготовку пакета.
     @State private var activePair = ""
     @State private var pendingTranslation: Task<Void, Never>?
+    /// Сессия поднята только ради загрузки пакета, переводить пока нечего.
+    @State private var isPreparingOnly = false
     @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(spacing: 9) {
             languageBar
+
+            if store.needsDownload { downloadCard }
 
             CurtyCard {
                 VStack(spacing: 7) {
@@ -35,7 +39,10 @@ struct TranslateView: View {
         .onAppear {
             store.resumeIfInterrupted()
             loadSupportedLanguages()
+            refreshAvailability()
         }
+        .onChange(of: store.target) { _, _ in refreshAvailability() }
+        .onChange(of: store.source) { _, _ in refreshAvailability() }
         // Перевод идёт сам: кнопки «Перевести» нет, набранное переводится через
         // паузу после последнего нажатия.
         .onChange(of: store.sourceText) { _, _ in scheduleTranslation() }
@@ -138,6 +145,24 @@ struct TranslateView: View {
         .help(isAutomatic ? "Язык определяется по тексту" : "Выбрать язык")
     }
 
+    private var downloadCard: some View {
+        CurtyCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Языки перевода не загружены")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Перевод работает без интернета, но словари для этого нужно один раз скачать. Около 150 МБ на группу родственных языков — русский, английский, польский и украинский приезжают вместе.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(store.isDownloading ? "Загружаем…" : "Загрузить") { startPreparation() }
+                    .buttonStyle(CurtyProminentButtonStyle())
+                    .curtyHoverLift()
+                    .disabled(store.isDownloading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     // MARK: - Поля
 
     private var sourceEditor: some View {
@@ -211,6 +236,30 @@ struct TranslateView: View {
         }
     }
 
+    /// Проверяем заранее: если пакета нет, перевод всё равно упрётся в вопрос
+    /// системы — пусть он всплывёт при заходе во вкладку, а не под руками.
+    private func refreshAvailability() {
+        Task {
+            let pair = store.pair ?? TranslationLanguagePolicy.warmupPair(target: store.target)
+            let status = try? await LanguageAvailability().status(
+                from: Locale.Language(identifier: pair.from),
+                to: Locale.Language(identifier: pair.to)
+            )
+            store.needsDownload = status == .supported
+        }
+    }
+
+    private func startPreparation() {
+        let pair = store.pair ?? TranslationLanguagePolicy.warmupPair(target: store.target)
+        store.isDownloading = true
+        isPreparingOnly = true
+        activePair = "\(pair.from)>\(pair.to)"
+        configuration = TranslationSession.Configuration(
+            source: Locale.Language(identifier: pair.from),
+            target: Locale.Language(identifier: pair.to)
+        )
+    }
+
     /// Пауза перед переводом: иначе каждая буква поднимала бы сессию заново.
     /// Смена языка руками — случай другой, там ждать нечего.
     private func scheduleTranslation(immediately: Bool = false) {
@@ -250,6 +299,15 @@ struct TranslateView: View {
     }
 
     private func translate(with session: TranslationSession) async {
+        if isPreparingOnly {
+            isPreparingOnly = false
+            // Система сама покажет вопрос о загрузке и дождётся ответа.
+            try? await session.prepareTranslation()
+            store.isDownloading = false
+            refreshAvailability()
+            return
+        }
+
         let requested = store.sourceText
         guard !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         store.status = .translating
