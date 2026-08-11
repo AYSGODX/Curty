@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func installMenuBarItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "Curty")
+        item.button?.image = Self.menuBarIcon()
 
         let menu = NSMenu()
         menu.delegate = self
@@ -50,6 +50,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         clipboardMenuItem?.state = model.preferences.clipboardMonitoringEnabled ? .on : .off
         pinMenuItem?.state = model.isPinned ? .on : .off
+    }
+
+    /// Шаблонный значок: одноцветный, система сама красит его под панель и
+    /// инвертирует при нажатии. Если файла в сборке нет — прежний символ,
+    /// лишь бы место в строке меню не пустовало.
+    private static func menuBarIcon() -> NSImage? {
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+              let image = NSImage(contentsOf: url) else {
+            return NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "Curty")
+        }
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = true
+        image.accessibilityDescription = "Curty"
+        return image
     }
 
     @objc private func togglePanel() { panelController?.toggle(holdingUntilCursorArrives: true) }

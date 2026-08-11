@@ -52,6 +52,7 @@ fi
 # Тот же знак рисуется в шторке — туда едет уменьшенная копия, а не исходник
 # на тысячу пикселей: ужатый одним прыжком, он даёт рваный край.
 cp "$ROOT/Resources/LogoSmall.png" "$APP/Contents/Resources/LogoSmall.png"
+cp "$ROOT/Resources/MenuBarIcon.png" "$APP/Contents/Resources/MenuBarIcon.png"
 
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"

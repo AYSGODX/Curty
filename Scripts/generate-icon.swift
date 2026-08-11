@@ -137,6 +137,52 @@ print("готово: \(iconURL.path)")
 // Знак в шторке рисуется размером в двадцать с небольшим пунктов. Ужимать в них
 // исходник на тысячу пикселей — верный способ получить рваный край, поэтому
 // рядом кладётся заранее уменьшенная копия с честным пересчётом.
+// Значок в строке меню обязан быть шаблонным: одноцветным с прозрачностью.
+// Тогда система сама красит его под светлую и тёмную панель и инвертирует при
+// нажатии. Цветной значок этого не умеет и выглядит чужим среди соседей.
+//
+// Прозрачность берём из белизны исходника: белая «C» становится непрозрачной,
+// оранжевый фон и тёмный вырез — пустотой. Отбираем по самому слабому каналу:
+// у белого он 255, у оранжевого 71, у выреза 19 — разделяются с запасом, а
+// сглаженные края переходят плавно.
+if isFullBleed {
+    let menuBarSide = 36   // 18 пунктов на экране с двойной плотностью
+    let menuBarContext = CGContext(data: nil, width: menuBarSide, height: menuBarSide,
+                                   bitsPerComponent: 8, bytesPerRow: 0, space: sRGB,
+                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    menuBarContext.interpolationQuality = .high
+    menuBarContext.draw(logo, in: CGRect(x: 0, y: 0, width: menuBarSide, height: menuBarSide))
+
+    if let data = menuBarContext.data {
+        // Строки в растре лежат не вплотную: CoreGraphics выравнивает их по
+        // своему шагу. Обход подряд рисовал поперечную полосу — байты одной
+        // строки принимались за начало следующей.
+        let rowStride = menuBarContext.bytesPerRow
+        let pixels = data.bindMemory(to: UInt8.self, capacity: rowStride * menuBarSide)
+        for row in 0..<menuBarSide {
+            for column in 0..<menuBarSide {
+                let index = row * rowStride + column * 4
+                let weakest = Int(min(pixels[index], pixels[index + 1], pixels[index + 2]))
+                let alpha = UInt8(max(0, min(255, (weakest - 140) * 255 / 115)))
+                // Цвет шаблона роли не играет, но премножение требует согласия.
+                pixels[index] = alpha
+                pixels[index + 1] = alpha
+                pixels[index + 2] = alpha
+                pixels[index + 3] = alpha
+            }
+        }
+    }
+
+    let menuBarURL = logoURL.deletingLastPathComponent().appendingPathComponent("MenuBarIcon.png")
+    if let image = menuBarContext.makeImage(),
+       let out = CGImageDestinationCreateWithURL(menuBarURL as CFURL,
+                                                 UTType.png.identifier as CFString, 1, nil) {
+        CGImageDestinationAddImage(out, image, nil)
+        CGImageDestinationFinalize(out)
+        print("готово: \(menuBarURL.path)")
+    }
+}
+
 let smallURL = logoURL.deletingLastPathComponent().appendingPathComponent("LogoSmall.png")
 let smallSide = 128
 let smallContext = CGContext(data: nil, width: smallSide, height: smallSide, bitsPerComponent: 8,
@@ -157,11 +203,17 @@ smallContext.draw(logo, in: CGRect(x: (CGFloat(smallSide) - smallSize.width) / 2
 // размер, а не цвет. Края, размытые сглаживанием, остаются подкрашенными в
 // фон — на плитке того же цвета этого не видно.
 if isFullBleed, let data = smallContext.data {
-    let pixels = data.bindMemory(to: UInt8.self, capacity: smallSide * smallSide * 4)
+    // Обход строка за строкой по шагу растра: подряд идти нельзя, строки
+    // выровнены и между ними бывает пустое место.
+    let rowStride = smallContext.bytesPerRow
+    let pixels = data.bindMemory(to: UInt8.self, capacity: rowStride * smallSide)
     let background = (pixels[0], pixels[1], pixels[2])
-    for index in stride(from: 0, to: smallSide * smallSide * 4, by: 4)
-    where (pixels[index], pixels[index + 1], pixels[index + 2]) == background {
-        pixels[index] = 0; pixels[index + 1] = 0; pixels[index + 2] = 0; pixels[index + 3] = 0
+    for row in 0..<smallSide {
+        for column in 0..<smallSide {
+            let index = row * rowStride + column * 4
+            guard (pixels[index], pixels[index + 1], pixels[index + 2]) == background else { continue }
+            pixels[index] = 0; pixels[index + 1] = 0; pixels[index + 2] = 0; pixels[index + 3] = 0
+        }
     }
 }
 
