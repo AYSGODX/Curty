@@ -68,11 +68,6 @@ enum SystemOverlayPolicy {
     /// first count that cannot be an ordinary desktop.
     static let overlayWindowCount = 2
 
-    /// How long suppression may last before the count is treated as this Mac's
-    /// normal rather than an overlay. Only time with the cursor in the notch
-    /// counts, so ordinary use never reaches it — this exists so a system whose
-    /// resting count differs from the measured one cannot leave the notch dead.
-    static let giveUpInterval: TimeInterval = 10
 
     static func coversDisplay(width: CGFloat, height: CGFloat, screenSize: CGSize) -> Bool {
         let screenArea = screenSize.width * screenSize.height
@@ -186,7 +181,9 @@ final class PanelController {
     private var trackingMenus = 0
     private var overlayCheckedAt: TimeInterval = 0
     private var overlayWasVisible = false
-    private var suppressingSince: TimeInterval?
+    /// Видели ли мы на этой машине спокойный рабочий стол — то есть работает
+    /// ли здесь счёт окон Dock как признак Mission Control вообще.
+    private var hasSeenCalmDesktop = false
     private var awaitsCursorArrival = false
     private var awaitsCursorArrivalSince: TimeInterval = 0
 
@@ -448,23 +445,31 @@ final class PanelController {
 
         if model.preferences.respectFullScreenEnabled,
            SystemOverlayPolicy.isFullScreenWindowPresent(screenSize: screen.frame.size) {
-            // Полноэкранный режим — не оверлей Dock, ему предохранитель по
-            // времени не нужен: он кончится вместе с выходом из полного экрана.
-            suppressingSince = nil
+            // Полноэкранный режим сам себя отменит выходом из него, никакой
+            // страховки ему не нужно.
             overlayWasVisible = true
             return true
         }
 
         let count = SystemOverlayPolicy.fullScreenDockWindowCount(screenSize: screen.frame.size)
-        guard count >= SystemOverlayPolicy.overlayWindowCount else {
-            suppressingSince = nil
+
+        // Правило «два и больше полноэкранных окон Dock — это Mission Control»
+        // верно только там, где бывает и меньше. Раньше здесь стоял
+        // предохранитель по времени: если счёт держался высоким дольше десяти
+        // секунд, подавление снималось. Замер показал, чем это оборачивается —
+        // Mission Control держат открытым дольше десяти секунд, и шторка
+        // оживала прямо поверх него.
+        //
+        // Вместо таймера — факт: пока мы своими глазами не увидели спокойный
+        // рабочий стол, подавлять нельзя. Увидели хоть раз — значит правило на
+        // этой машине различает состояния, и верить ему можно всегда.
+        if count < SystemOverlayPolicy.overlayWindowCount {
+            hasSeenCalmDesktop = true
             overlayWasVisible = false
             return false
         }
 
-        let since = suppressingSince ?? now
-        suppressingSince = since
-        overlayWasVisible = now - since < SystemOverlayPolicy.giveUpInterval
+        overlayWasVisible = hasSeenCalmDesktop
         return overlayWasVisible
     }
 
