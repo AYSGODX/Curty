@@ -106,8 +106,13 @@ struct NotesView: View {
                                 glyphSize: 13
                             ) { store.remove(note) }
                         }
+                        // Читать текст надо из стора, а не из note: та копия
+                        // захвачена при отрисовке и отстаёт на одно нажатие.
+                        // SwiftUI видел расхождение и переписывал поле целиком,
+                        // сбрасывая курсор в конец, — правка в середине текста
+                        // была невозможна.
                         TextEditor(text: Binding(
-                            get: { note.text },
+                            get: { store.items.first { $0.id == note.id }?.text ?? "" },
                             set: { store.update(note.id, text: $0) }
                         ))
                         .font(.system(size: 13))
