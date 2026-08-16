@@ -49,31 +49,30 @@ struct NotesView: View {
         }
     }
 
-    private func background(for id: UUID) -> Color {
-        if store.selectedID == id { return CurtyTheme.accent.opacity(0.16) }
-        return hoveredID == id ? .primary.opacity(0.10) : .primary.opacity(0.04)
-    }
-
     private var content: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             VStack(spacing: 8) {
                 Button { store.add() } label: {
                     Label("Новая", systemImage: "plus")
                 }
                 .buttonStyle(CurtyProminentButtonStyle())
                 .curtyHoverLift(scale: 1.04)
-                ScrollView {
-                    VStack(spacing: 6) {
+                CurtyListPane(footer: "заметок \(store.items.count)") {
+                    VStack(spacing: 5) {
                         ForEach(store.items) { note in
                             Button {
                                 store.selectedID = note.id
                             } label: {
-                                Text(note.text.isEmpty ? "Новая заметка" : note.text)
-                                    .font(.caption)
-                                    .lineLimit(2)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(8)
-                                    .background(background(for: note.id), in: RoundedRectangle(cornerRadius: 9))
+                                SelectableRow(
+                                    isSelected: store.selectedID == note.id,
+                                    isHovered: hoveredID == note.id
+                                ) {
+                                    Text(note.text.isEmpty ? "пустая заметка" : note.text)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(CurtyTheme.engraved)
+                                        .lineLimit(2)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -89,14 +88,12 @@ struct NotesView: View {
                     }
                 }
             }
-            .frame(width: 92)
+            .frame(width: 104)
 
-            CurtyCard {
-                if let note = selectedNote {
+            if let note = selectedNote {
+                CurtySection(title: "Заметка", fillsHeight: true) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Быстрая заметка")
-                                .font(.system(size: 13, weight: .semibold))
                             Spacer()
                             CurtyRowButton(
                                 systemName: "trash",
@@ -120,25 +117,22 @@ struct NotesView: View {
                         // остаётся прямоугольник чужого цвета.
                         .scrollContentBackground(.hidden)
                         .padding(6)
-                        .frame(minHeight: 132)
+                        .frame(maxHeight: .infinity)
                         .curtyFieldChrome(isFocused: isEditorFocused, cornerRadius: 10)
                         .focused($isEditorFocused)
                         .focusEffectDisabled()
 
                         counter(for: note)
                     }
-                } else {
-                    VStack(spacing: 9) {
-                        Image(systemName: "note.text")
-                            .font(.system(size: 27, weight: .light))
-                            .foregroundStyle(CurtyTheme.accent)
-                        Text("Создайте локальную заметку")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 140)
                 }
+            } else {
+                DrawnEmptyState(
+                    icon: "note.text",
+                    title: "Заметок нет",
+                    detail: "Нажмите «Новая» слева.\nЗаметки лежат на этом Mac и никуда не уходят."
+                )
             }
-            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
     }
 }

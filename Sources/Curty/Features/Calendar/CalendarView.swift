@@ -21,7 +21,7 @@ struct CalendarView: View {
                             .font(.system(size: 15, weight: .semibold))
                         Text(Date.now.formatted(Date.FormatStyle(timeZone: zone).weekday(.wide).month(.wide).day()))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CurtyTheme.engravedDim)
                         // Пояс отличается от системного: без этой строки 19:00
                         // в Curty против 15:00 в «Календаре» читается как сбой.
                         if preferences.isDisplayTimeZoneOverridden {
@@ -72,19 +72,11 @@ struct CalendarView: View {
         let meetings = CalendarStore.upcoming(store.meetings, now: now)
         VStack(spacing: 10) {
             if meetings.isEmpty {
-                CurtyCard {
-                    VStack(spacing: 8) {
-                        Image(systemName: "calendar.badge.checkmark")
-                            .font(.system(size: 26, weight: .light))
-                            .foregroundStyle(CurtyTheme.success)
-                        Text("Ближайших встреч нет")
-                            .font(.system(size: 13, weight: .medium))
-                        Text(store.horizon.emptyDetail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 80)
-                }
+                DrawnEmptyState(
+                    icon: "calendar.badge.checkmark",
+                    title: "Встреч нет",
+                    detail: store.horizon.emptyDetail
+                )
 
                 // Пустой список читается как «календарь не работает», хотя чаще
                 // всего нужная учётная запись просто не подключена к системе.
@@ -95,7 +87,7 @@ struct CalendarView: View {
                             .font(.system(size: 12, weight: .medium))
                         Text("Curty показывает все календари, подключённые к системному «Календарю» — Google, Exchange, iCloud. Отдельный вход в Curty не нужен: аккаунт добавляется один раз в настройках системы.")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CurtyTheme.engravedDim)
                             .fixedSize(horizontal: false, vertical: true)
                         Button("Учётные записи интернета") {
                             store.openAccountSettings()
@@ -107,8 +99,8 @@ struct CalendarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
+                CurtyListPane(footer: "встреч \(meetings.count)") {
+                    LazyVStack(spacing: 5) {
                         ForEach(meetings) { meeting in
                             HStack(spacing: 10) {
                                 VStack(alignment: .leading, spacing: 1) {
@@ -119,7 +111,7 @@ struct CalendarView: View {
                                     if !DisplayTimeZonePolicy.calendar(for: zone).isDateInToday(meeting.start) {
                                         Text(meeting.start.formatted(Date.FormatStyle(timeZone: zone).weekday(.abbreviated).day()))
                                             .font(.caption2)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(CurtyTheme.engravedDim)
                                     }
                                 }
                                 .frame(width: 54, alignment: .leading)
@@ -129,7 +121,7 @@ struct CalendarView: View {
                                         .lineLimit(1)
                                     Text(meeting.provider ?? meeting.calendarName)
                                         .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(CurtyTheme.engravedDim)
                                 }
                                 Spacer()
                                 if meeting.link != nil {
@@ -139,7 +131,7 @@ struct CalendarView: View {
                                 }
                             }
                             .padding(9)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                            .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                     }
                 }
@@ -181,18 +173,18 @@ struct CalendarView: View {
         .frame(width: 148)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(.primary.opacity(0.07))
+                .fill(Color.black.opacity(0.35))
         )
     }
 
     private func tint(for option: CalendarStore.Horizon) -> Color {
-        if store.horizon == option { return .white }
-        return hoveredHorizon == option ? .primary : .secondary
+        if store.horizon == option { return Color(red: 0.13, green: 0.10, blue: 0.03) }
+        return hoveredHorizon == option ? CurtyTheme.engraved : CurtyTheme.engravedDim
     }
 
     private func background(for option: CalendarStore.Horizon) -> Color {
         if store.horizon == option { return CurtyTheme.accent }
-        return hoveredHorizon == option ? .primary.opacity(0.10) : .clear
+        return hoveredHorizon == option ? Color.white.opacity(0.08) : .clear
     }
 
     private func accessCard(
@@ -201,19 +193,17 @@ struct CalendarView: View {
         actionTitle: String,
         action: @escaping () -> Void
     ) -> some View {
-        CurtyCard {
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
+        CurtySection(title: title, fillsHeight: true) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .font(.system(size: 11))
+                    .foregroundStyle(CurtyTheme.engravedDim)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button(actionTitle, action: action)
                     .buttonStyle(CurtyProminentButtonStyle())
-                    .curtyHoverLift()
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 80)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

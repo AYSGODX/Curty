@@ -4,8 +4,6 @@ import SwiftUI
 struct ShelfView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var model: AppModel
-    @State private var pendingExecutable: ShelfItem?
-    @State private var isConfirmingClear = false
     /// Выделение множественное: ⌘-клик добавляет и убирает, обычный клик
     /// оставляет один элемент.
     @State private var selection: Set<UUID> = []
@@ -19,6 +17,7 @@ struct ShelfView: View {
             // "Добавить" sits on the left because the right-hand slot is where
             // Буфер keeps its "Очистить"; a button that changes meaning when you
             // switch tabs is a button you eventually misclick.
+            CurtyStrip {
             HStack(spacing: 8) {
                 Button("Добавить", systemImage: "plus") { chooseFiles() }
                     .buttonStyle(CurtyProminentButtonStyle())
@@ -28,13 +27,17 @@ struct ShelfView: View {
                      ? "Выбрано: \(selection.count)"
                      : "Элементов: \(store.items.count)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
 
                 Spacer(minLength: 8)
 
                 if !store.items.isEmpty {
                     Button {
-                        isConfirmingClear = true
+                        model.confirm(
+                            "Убрать все файлы с полки?",
+                            detail: "Полка забудет ссылки на файлы. Сами файлы останутся на своих местах.",
+                            actionTitle: "Убрать"
+                        ) { store.clearReferences() }
                     } label: {
                         Label("Очистить", systemImage: "trash")
                             .font(.caption)
@@ -45,25 +48,17 @@ struct ShelfView: View {
                     .help("Убрать все файлы с полки")
                 }
             }
+            }
 
             if store.items.isEmpty {
-                CurtyCard {
-                    VStack(spacing: 12) {
-                        Image(systemName: "tray.and.arrow.down")
-                            .font(.system(size: 30, weight: .light))
-                            .foregroundStyle(CurtyTheme.accent)
-                        Text("Временная полка файлов")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text("Добавьте файлы, чтобы держать локальные ссылки под рукой.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 118)
-                }
+                DrawnEmptyState(
+                    icon: "tray.and.arrow.down",
+                    title: "Полка пуста",
+                    detail: "Перетащите файлы на вырез экрана\nили добавьте их кнопкой слева."
+                )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
+                CurtyListPane(footer: "элементов \(store.items.count)") {
+                    LazyVStack(spacing: 5) {
                         ForEach(store.items) { item in
                             row(for: item)
                         }
@@ -75,24 +70,7 @@ struct ShelfView: View {
                 CurtyErrorRow(message: error) { store.lastError = nil }
             }
         }
-        .confirmationDialog(
-            "Открыть исполняемый файл?",
-            isPresented: Binding(
-                get: { pendingExecutable != nil },
-                set: { if !$0 { pendingExecutable = nil } }
-            ),
-            presenting: pendingExecutable
-        ) { item in
-            Button("Открыть «\(item.name)»", role: .destructive) {
-                if store.open(item, allowingExecutables: true) {
-                    model.requestPanelClose()
-                }
-                pendingExecutable = nil
-            }
-            Button("Отмена", role: .cancel) { pendingExecutable = nil }
-        } message: { item in
-            Text("«\(item.name)» может запустить код на этом Mac.")
-        }
+
         .focusable()
         .focused($isListFocused)
         // Focus is only here so the space bar arrives; the system focus ring
@@ -123,15 +101,7 @@ struct ShelfView: View {
         .onChange(of: model.isPanelOpen) { _, isOpen in
             if !isOpen { selection = [] }
         }
-        .confirmationDialog(
-            "Убрать все файлы с полки?",
-            isPresented: $isConfirmingClear
-        ) {
-            Button("Убрать", role: .destructive) { store.clearReferences() }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("Полка забудет ссылки на файлы. Сами файлы останутся на своих местах.")
-        }
+
     }
 
     /// SwiftUI's fileImporter opens the dialog without bringing the app forward.
@@ -174,7 +144,7 @@ struct ShelfView: View {
                 if !item.isAvailable {
                     Text("Файл сейчас недоступен")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CurtyTheme.engravedDim)
                 }
             }
 
@@ -303,7 +273,15 @@ struct ShelfView: View {
     /// only once the file actually opened, never when the attempt was refused.
     private func requestOpen(_ item: ShelfItem) {
         if item.isPotentiallyExecutable {
-            pendingExecutable = item
+            model.confirm(
+                "Открыть исполняемый файл?",
+                detail: "«\(item.name)» может запустить код на этом Mac.",
+                actionTitle: "Открыть"
+            ) {
+                if store.open(item, allowingExecutables: true) {
+                    model.requestPanelClose()
+                }
+            }
         } else if store.open(item) {
             model.requestPanelClose()
         }

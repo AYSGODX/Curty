@@ -1,52 +1,40 @@
 #!/usr/bin/swift
-// Собирает Resources/AppIcon.icns из одного исходника — знака на прозрачном фоне.
+// Собирает знак Curty во всех видах, в которых он встречается.
+//
+//   Scripts/generate-icon.swift Resources [preview.png]
+//
+// Пишет в указанный каталог:
+//   AppIcon.icns    — иконка приложения, все размеры от 16 до 1024;
+//   LogoSmall.png   — то же лицо в 128 точках, для плитки в рельсе шторки;
+//   MenuBarIcon.png — шаблон для строки меню: один силуэт знака, без плиты.
+//
+// Знак рисуется кодом, а не берётся из картинки. Раньше исходником был
+// Resources/Logo.png, и всё остальное вырезалось из него по цвету — приём,
+// который держался ровно до тех пор, пока лицо было белой буквой на оранжевом.
+// У графитовой плиты с янтарным знаком отбирать по яркости нечего: плита и знак
+// в тёмных каналах почти совпадают. Рисуя фигуру, мы точно знаем, где она.
 //
 // iconutil здесь не используется намеренно: на macOS 26 он отвергает
 // сгенерированный набор с «Invalid Iconset» и рвёт установку. Файл пишется
 // напрямую через ImageIO.
-//
-//   Scripts/generate-icon.swift Resources/Logo.png Resources/AppIcon.icns
-//
-// Третьим аргументом можно попросить лист предпросмотра: знак в реальных
-// размерах и плитка так, как она выглядит в шторке.
 import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 
 let arguments = CommandLine.arguments
-guard arguments.count >= 3 else {
-    fputs("usage: generate-icon.swift <logo.png> <AppIcon.icns> [preview.png]\n", stderr)
+guard arguments.count >= 2 else {
+    fputs("usage: generate-icon.swift <resources-dir> [preview.png]\n", stderr)
     exit(64)
 }
 
-let logoURL = URL(fileURLWithPath: arguments[1])
-let iconURL = URL(fileURLWithPath: arguments[2])
-
-guard let source = CGImageSourceCreateWithURL(logoURL as CFURL, nil),
-      let logo = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-    fputs("error: не удалось прочитать \(logoURL.path)\n", stderr)
-    exit(66)
-}
+let resourcesURL = URL(fileURLWithPath: arguments[1], isDirectory: true)
+let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
 // Сетка иконок macOS: холст 1024, сама плитка — 824 по центру, остальное поля.
 // Без них иконка выглядит крупнее соседних в доке.
 let plateInset: CGFloat = 100
-/// Доля плитки, которую занимает знак. Подобрано на глаз по листу
-/// предпросмотра: меньше — знак теряется, больше — упирается в углы.
-let glyphScale: CGFloat = 0.62
 
-let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
-
-/// Исходник бывает двух видов, и обращаться с ними надо по-разному: знак на
-/// прозрачном фоне нужно положить на подложку, а готовое лицо иконки — залить
-/// им всю плитку. Отличаем по углам: если они непрозрачны, фон нарисован.
-let isFullBleed: Bool = {
-    var pixel = [UInt8](repeating: 0, count: 4)
-    let probe = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-                          space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    probe.draw(logo, in: CGRect(x: 0, y: 0, width: CGFloat(logo.width) * 40, height: CGFloat(logo.height) * 40))
-    return pixel[3] > 200
-}()
+let amber = CGColor(srgbRed: 0.941, green: 0.659, blue: 0.118, alpha: 1)
 
 /// Скруглённый квадрат Apple — суперэллипс, а не прямоугольник с дугами:
 /// у дуг заметно другой изгиб на большом размере.
@@ -66,7 +54,92 @@ func squirclePath(in rect: CGRect, exponent: Double = 5) -> CGPath {
     return path
 }
 
-func renderIcon(side: Int) -> CGImage {
+/// «C» собрана как деталь, а не набрана шрифтом: кольцо с радиальным вырезом,
+/// торцы плоские и смотрят в центр. Так она остаётся собой в шестнадцати
+/// пикселях, где у любой гарнитуры уже теряются засечки и модуляция штриха.
+func markPath(center: CGPoint, outer: CGFloat, thicknessRatio: CGFloat = 0.44, gapDegrees: CGFloat = 74) -> CGPath {
+    let path = CGMutablePath()
+    let inner = outer * (1 - thicknessRatio)
+    let half = gapDegrees / 2 * .pi / 180
+    path.addArc(center: center, radius: outer, startAngle: half, endAngle: 2 * .pi - half, clockwise: false)
+    path.addArc(center: center, radius: inner, startAngle: 2 * .pi - half, endAngle: half, clockwise: true)
+    path.closeSubpath()
+    return path
+}
+
+/// Графитовая плита: тёмный низ, светлее верх, мягкий продольный отлив и фаска —
+/// светлая сверху, тёмная снизу. Тот же материал, что у самой панели.
+func drawPlate(_ ctx: CGContext, in rect: CGRect) {
+    let shape = squirclePath(in: rect)
+
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.clip()
+
+    let base = CGGradient(colorsSpace: sRGB, colors: [
+        CGColor(srgbRed: 0.255, green: 0.259, blue: 0.267, alpha: 1),
+        CGColor(srgbRed: 0.145, green: 0.149, blue: 0.157, alpha: 1),
+    ] as CFArray, locations: [0, 1])!
+    ctx.drawLinearGradient(base, start: CGPoint(x: 0, y: rect.maxY),
+                           end: CGPoint(x: 0, y: rect.minY), options: [])
+
+    // Отлив шлифовки: широкие мягкие ленты, без единой линии. Линии на
+    // маленьких размерах превращаются в рябь.
+    let sheen = CGGradient(colorsSpace: sRGB, colors: [
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.00),
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.05),
+        CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.05),
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.04),
+        CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.04),
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.00),
+    ] as CFArray, locations: [0, 0.18, 0.38, 0.6, 0.82, 1])!
+    ctx.drawLinearGradient(sheen, start: CGPoint(x: rect.minX, y: 0),
+                           end: CGPoint(x: rect.maxX, y: 0), options: [])
+    ctx.restoreGState()
+
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.setLineWidth(max(1, rect.width / 90))
+    ctx.replacePathWithStrokedPath()
+    ctx.clip()
+    let edge = CGGradient(colorsSpace: sRGB, colors: [
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.32),
+        CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.45),
+    ] as CFArray, locations: [0, 1])!
+    ctx.drawLinearGradient(edge, start: CGPoint(x: 0, y: rect.maxY),
+                           end: CGPoint(x: 0, y: rect.minY), options: [])
+    ctx.restoreGState()
+}
+
+/// Знак выгравирован в плите и залит светом: под фигурой тёмный провал, снизу
+/// светлая кромка канавки, внутри — янтарь с ореолом.
+func drawMark(_ ctx: CGContext, in rect: CGRect) {
+    let center = CGPoint(x: rect.midX, y: rect.midY)
+    let path = markPath(center: center, outer: rect.width * 0.30)
+    let relief = rect.width * 0.010
+
+    ctx.saveGState()
+    ctx.translateBy(x: 0, y: -relief)
+    ctx.addPath(path)
+    ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.16))
+    ctx.fillPath()
+    ctx.restoreGState()
+
+    ctx.saveGState()
+    ctx.addPath(path)
+    ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.55))
+    ctx.fillPath()
+    ctx.restoreGState()
+
+    ctx.saveGState()
+    ctx.setShadow(offset: .zero, blur: rect.width * 0.045, color: amber.copy(alpha: 0.85))
+    ctx.addPath(path)
+    ctx.setFillColor(amber)
+    ctx.fillPath()
+    ctx.restoreGState()
+}
+
+func renderFace(side: Int) -> CGImage {
     let size = CGFloat(side)
     let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
                         space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
@@ -76,50 +149,39 @@ func renderIcon(side: Int) -> CGImage {
     let plate = CGRect(x: plateInset * scale, y: plateInset * scale,
                        width: (1_024 - plateInset * 2) * scale,
                        height: (1_024 - plateInset * 2) * scale)
-    let shape = squirclePath(in: plate)
-
-    if isFullBleed {
-        // Лицо иконки уже нарисовано — остаётся обрезать его по форме плитки.
-        ctx.saveGState()
-        ctx.addPath(shape)
-        ctx.clip()
-        ctx.draw(logo, in: plate)
-        ctx.restoreGState()
-        return ctx.makeImage()!
-    }
-
-    // Подложка почти белая с еле заметным переходом: знак тёмный, и на тёмном
-    // доке без подложки он бы просто исчез.
-    ctx.saveGState()
-    ctx.addPath(shape)
-    ctx.clip()
-    let gradient = CGGradient(colorsSpace: sRGB, colors: [
-        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
-        CGColor(srgbRed: 0.925, green: 0.925, blue: 0.945, alpha: 1),
-    ] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: plate.maxY),
-                           end: CGPoint(x: 0, y: plate.minY), options: [])
-    ctx.restoreGState()
-
-    // Волосяная кромка, иначе на белом фоне Finder иконка растворяется.
-    ctx.saveGState()
-    ctx.addPath(shape)
-    ctx.setStrokeColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.10))
-    ctx.setLineWidth(max(1, size / 512))
-    ctx.strokePath()
-    ctx.restoreGState()
-
-    let glyphSide = plate.width * glyphScale
-    let ratio = CGFloat(logo.width) / CGFloat(logo.height)
-    let glyphSize = ratio >= 1
-        ? CGSize(width: glyphSide, height: glyphSide / ratio)
-        : CGSize(width: glyphSide * ratio, height: glyphSide)
-    ctx.draw(logo, in: CGRect(x: plate.midX - glyphSize.width / 2,
-                              y: plate.midY - glyphSize.height / 2,
-                              width: glyphSize.width, height: glyphSize.height))
+    drawPlate(ctx, in: plate)
+    drawMark(ctx, in: plate)
     return ctx.makeImage()!
 }
 
+/// Шаблон для строки меню: один силуэт знака в прозрачности, без плиты.
+/// Система сама красит его под светлую и тёмную панель и инвертирует при
+/// нажатии; цветной значок этого не умеет и выглядит чужим среди соседей.
+func renderMenuBarTemplate(side: Int) -> CGImage {
+    let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let size = CGFloat(side)
+    // В строке меню знак живёт один, без плиты вокруг, поэтому занимает почти
+    // всё поле: те же пропорции, что на плите, здесь выглядели бы точкой.
+    let path = markPath(center: CGPoint(x: size / 2, y: size / 2), outer: size * 0.42)
+    ctx.addPath(path)
+    ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+    ctx.fillPath()
+    return ctx.makeImage()!
+}
+
+func write(_ image: CGImage, to url: URL) {
+    guard let out = CGImageDestinationCreateWithURL(
+        url as CFURL, UTType.png.identifier as CFString, 1, nil
+    ) else { return }
+    CGImageDestinationAddImage(out, image, nil)
+    CGImageDestinationFinalize(out)
+    print("готово: \(url.path)")
+}
+
+// --- Иконка приложения -------------------------------------------------------
+
+let iconURL = resourcesURL.appendingPathComponent("AppIcon.icns")
 let variants = [16, 32, 32, 64, 128, 256, 256, 512, 512, 1_024]
 guard let destination = CGImageDestinationCreateWithURL(
     iconURL as CFURL, UTType.icns.identifier as CFString, variants.count, nil
@@ -127,139 +189,64 @@ guard let destination = CGImageDestinationCreateWithURL(
     fputs("error: не удалось создать \(iconURL.path)\n", stderr)
     exit(73)
 }
-for side in variants { CGImageDestinationAddImage(destination, renderIcon(side: side), nil) }
+for side in variants { CGImageDestinationAddImage(destination, renderFace(side: side), nil) }
 guard CGImageDestinationFinalize(destination) else {
     fputs("error: не удалось записать \(iconURL.path)\n", stderr)
     exit(73)
 }
 print("готово: \(iconURL.path)")
 
-// Знак в шторке рисуется размером в двадцать с небольшим пунктов. Ужимать в них
-// исходник на тысячу пикселей — верный способ получить рваный край, поэтому
-// рядом кладётся заранее уменьшенная копия с честным пересчётом.
-// Значок в строке меню обязан быть шаблонным: одноцветным с прозрачностью.
-// Тогда система сама красит его под светлую и тёмную панель и инвертирует при
-// нажатии. Цветной значок этого не умеет и выглядит чужим среди соседей.
-//
-// Прозрачность берём из белизны исходника: белая «C» становится непрозрачной,
-// оранжевый фон и тёмный вырез — пустотой. Отбираем по самому слабому каналу:
-// у белого он 255, у оранжевого 71, у выреза 19 — разделяются с запасом, а
-// сглаженные края переходят плавно.
-if isFullBleed {
-    let menuBarSide = 36   // 18 пунктов на экране с двойной плотностью
-    let menuBarContext = CGContext(data: nil, width: menuBarSide, height: menuBarSide,
-                                   bitsPerComponent: 8, bytesPerRow: 0, space: sRGB,
-                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    menuBarContext.interpolationQuality = .high
-    menuBarContext.draw(logo, in: CGRect(x: 0, y: 0, width: menuBarSide, height: menuBarSide))
+// --- Плитка в шторке и значок строки меню ------------------------------------
 
-    if let data = menuBarContext.data {
-        // Строки в растре лежат не вплотную: CoreGraphics выравнивает их по
-        // своему шагу. Обход подряд рисовал поперечную полосу — байты одной
-        // строки принимались за начало следующей.
-        let rowStride = menuBarContext.bytesPerRow
-        let pixels = data.bindMemory(to: UInt8.self, capacity: rowStride * menuBarSide)
-        for row in 0..<menuBarSide {
-            for column in 0..<menuBarSide {
-                let index = row * rowStride + column * 4
-                let weakest = Int(min(pixels[index], pixels[index + 1], pixels[index + 2]))
-                let alpha = UInt8(max(0, min(255, (weakest - 140) * 255 / 115)))
-                // Цвет шаблона роли не играет, но премножение требует согласия.
-                pixels[index] = alpha
-                pixels[index + 1] = alpha
-                pixels[index + 2] = alpha
-                pixels[index + 3] = alpha
-            }
-        }
-    }
-
-    let menuBarURL = logoURL.deletingLastPathComponent().appendingPathComponent("MenuBarIcon.png")
-    if let image = menuBarContext.makeImage(),
-       let out = CGImageDestinationCreateWithURL(menuBarURL as CFURL,
-                                                 UTType.png.identifier as CFString, 1, nil) {
-        CGImageDestinationAddImage(out, image, nil)
-        CGImageDestinationFinalize(out)
-        print("готово: \(menuBarURL.path)")
-    }
-}
-
-let smallURL = logoURL.deletingLastPathComponent().appendingPathComponent("LogoSmall.png")
-let smallSide = 128
-let smallContext = CGContext(data: nil, width: smallSide, height: smallSide, bitsPerComponent: 8,
-                             bytesPerRow: 0, space: sRGB,
-                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-smallContext.interpolationQuality = .high
-let smallRatio = CGFloat(logo.width) / CGFloat(logo.height)
-let smallSize = smallRatio >= 1
-    ? CGSize(width: CGFloat(smallSide), height: CGFloat(smallSide) / smallRatio)
-    : CGSize(width: CGFloat(smallSide) * smallRatio, height: CGFloat(smallSide))
-smallContext.draw(logo, in: CGRect(x: (CGFloat(smallSide) - smallSize.width) / 2,
-                                   y: (CGFloat(smallSide) - smallSize.height) / 2,
-                                   width: smallSize.width, height: smallSize.height))
-
-// Для шторки фон вырезается: там плитку рисует само приложение, а знак нужен
-// отдельно, чтобы задавать ему размер. «C» — фигура крупная и сплошная, рядом
-// с тонкими значками инструментов она читается ярче, и уравнивает их именно
-// размер, а не цвет. Края, размытые сглаживанием, остаются подкрашенными в
-// фон — на плитке того же цвета этого не видно.
-if isFullBleed, let data = smallContext.data {
-    // Обход строка за строкой по шагу растра: подряд идти нельзя, строки
-    // выровнены и между ними бывает пустое место.
-    let rowStride = smallContext.bytesPerRow
-    let pixels = data.bindMemory(to: UInt8.self, capacity: rowStride * smallSide)
-    let background = (pixels[0], pixels[1], pixels[2])
-    for row in 0..<smallSide {
-        for column in 0..<smallSide {
-            let index = row * rowStride + column * 4
-            guard (pixels[index], pixels[index + 1], pixels[index + 2]) == background else { continue }
-            pixels[index] = 0; pixels[index + 1] = 0; pixels[index + 2] = 0; pixels[index + 3] = 0
-        }
-    }
-}
-
-if let smallImage = smallContext.makeImage(),
-   let smallOut = CGImageDestinationCreateWithURL(smallURL as CFURL,
-                                                  UTType.png.identifier as CFString, 1, nil) {
-    CGImageDestinationAddImage(smallOut, smallImage, nil)
-    CGImageDestinationFinalize(smallOut)
-    print("готово: \(smallURL.path)")
-}
+// Плитка рисуется размером в тридцать с небольшим пунктов. Ужимать в них
+// растр на тысячу пикселей — верный способ получить рваный край, поэтому рядом
+// кладётся заранее уменьшенная копия с честным пересчётом.
+write(renderFace(side: 128), to: resourcesURL.appendingPathComponent("LogoSmall.png"))
+// 18 пунктов на экране с двойной плотностью.
+let menuBar = renderMenuBarTemplate(side: 36)
+write(menuBar, to: resourcesURL.appendingPathComponent("MenuBarIcon.png"))
 
 // --- Лист предпросмотра ------------------------------------------------------
 
-guard arguments.count >= 4 else { exit(0) }
+guard arguments.count >= 3 else { exit(0) }
 
-let sheetWidth = 760, sheetHeight = 420
+let sheetWidth = 760, sheetHeight = 300
 let sheet = CGContext(data: nil, width: sheetWidth, height: sheetHeight, bitsPerComponent: 8,
                       bytesPerRow: 0, space: sRGB,
                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 sheet.interpolationQuality = .high
 sheet.setFillColor(CGColor(srgbRed: 0.12, green: 0.12, blue: 0.13, alpha: 1))
 sheet.fill(CGRect(x: 0, y: 0, width: sheetWidth, height: sheetHeight))
-
 // Слева — светлая половина: так видно, как иконка держится на белом.
 sheet.setFillColor(CGColor(srgbRed: 0.96, green: 0.96, blue: 0.97, alpha: 1))
 sheet.fill(CGRect(x: 0, y: 0, width: sheetWidth / 2, height: sheetHeight))
 
 var x = 24
 for side in [128, 64, 32, 16] {
-    let image = renderIcon(side: side)
-    sheet.draw(image, in: CGRect(x: x, y: 250, width: side, height: side))
-    sheet.draw(image, in: CGRect(x: x + sheetWidth / 2, y: 250, width: side, height: side))
+    let image = renderFace(side: side)
+    sheet.draw(image, in: CGRect(x: x, y: 140, width: side, height: side))
+    sheet.draw(image, in: CGRect(x: x + sheetWidth / 2, y: 140, width: side, height: side))
     x += side + 20
 }
 
-// Плитка шторки: 36×36 в рамке рельса, в трёхкратном увеличении.
-let railScale = 3
-let tile = renderIcon(side: 36 * railScale)
-sheet.setFillColor(CGColor(srgbRed: 0.095, green: 0.095, blue: 0.11, alpha: 1))
-sheet.fill(CGRect(x: 24, y: 30, width: 58 * railScale, height: 60 * railScale))
-sheet.draw(tile, in: CGRect(x: 24 + 11 * railScale, y: 30 + 12 * railScale,
-                            width: 36 * railScale, height: 36 * railScale))
+// Значок строки меню в обеих панелях, в трёхкратном увеличении.
+for (index, background) in [(0.96, 0.96, 0.97), (0.16, 0.16, 0.17)].enumerated() {
+    let originX = 24 + index * sheetWidth / 2
+    sheet.setFillColor(CGColor(srgbRed: background.0, green: background.1, blue: background.2, alpha: 1))
+    sheet.fill(CGRect(x: originX, y: 30, width: 120, height: 80))
+    sheet.saveGState()
+    sheet.clip(to: CGRect(x: originX + 30, y: 50, width: 54, height: 54), mask: menuBar)
+    sheet.setFillColor(index == 0
+        ? CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.85)
+        : CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.9))
+    sheet.fill(CGRect(x: originX + 30, y: 50, width: 54, height: 54))
+    sheet.restoreGState()
+}
+
 if let preview = sheet.makeImage(),
-   let out = CGImageDestinationCreateWithURL(URL(fileURLWithPath: arguments[3]) as CFURL,
+   let out = CGImageDestinationCreateWithURL(URL(fileURLWithPath: arguments[2]) as CFURL,
                                              UTType.png.identifier as CFString, 1, nil) {
     CGImageDestinationAddImage(out, preview, nil)
     CGImageDestinationFinalize(out)
-    print("предпросмотр: \(arguments[3])")
+    print("предпросмотр: \(arguments[2])")
 }

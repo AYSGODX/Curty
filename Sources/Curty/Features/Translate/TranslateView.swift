@@ -26,10 +26,10 @@ struct TranslateView: View {
 
             if store.needsDownload { downloadCard }
 
-            CurtyCard {
-                VStack(spacing: 7) {
+            CurtySection(title: "Текст", fillsHeight: true) {
+                VStack(spacing: 8) {
                     sourceEditor
-                    Divider()
+                    Rectangle().fill(CurtyTheme.scribe).frame(height: 1)
                     resultEditor
                 }
             }
@@ -130,13 +130,13 @@ struct TranslateView: View {
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
             }
             .font(.caption.weight(.medium))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .background(.primary.opacity(0.06), in: Capsule())
+            .background(Color.white.opacity(0.07), in: Capsule())
             .contentShape(Capsule())
         }
         .menuStyle(.borderlessButton)
@@ -152,7 +152,7 @@ struct TranslateView: View {
                     .font(.system(size: 12, weight: .medium))
                 Text("Перевод работает без интернета, но словарь для этого нужно один раз скачать. Родственные языки приезжают одной группой — около 150 МБ.")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(store.isDownloading ? "Загружаем…" : "Загрузить") { startPreparation() }
                     .buttonStyle(CurtyProminentButtonStyle())
@@ -183,7 +183,7 @@ struct TranslateView: View {
             if store.sourceText.isEmpty {
                 Text("Введите или вставьте текст")
                     .font(.system(size: isFloating ? 10 : 13, weight: isFloating ? .medium : .regular))
-                    .foregroundStyle(isFloating ? CurtyTheme.accent : Color.secondary.opacity(0.55))
+                    .foregroundStyle(isFloating ? CurtyTheme.accent : CurtyTheme.engravedDim)
                     .offset(x: 5, y: isFloating ? -1 : 7)
                     .allowsHitTesting(false)
             }
@@ -211,12 +211,12 @@ struct TranslateView: View {
             if store.translatedText.isEmpty {
                 Text("Перевод появится здесь")
                     .font(.system(size: 13))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .offset(x: 5, y: 7)
                     .allowsHitTesting(false)
             }
         }
-        .frame(height: 62)
+        .frame(maxHeight: .infinity)
     }
 
     private var statusBar: some View {
@@ -385,11 +385,11 @@ struct TranslateView: View {
 
     private var statusColor: Color {
         switch store.status {
-        case .idle: .secondary
+        case .idle: CurtyTheme.engravedDim
         case .translating: CurtyTheme.accent
         case .complete: CurtyTheme.success
-        case .failed: .red
-        case .nothingToDo: .secondary
+        case .failed: CurtyTheme.danger
+        case .nothingToDo: CurtyTheme.engravedDim
         }
     }
 }

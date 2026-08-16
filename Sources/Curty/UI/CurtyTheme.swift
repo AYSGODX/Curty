@@ -2,21 +2,21 @@ import AppKit
 import SwiftUI
 
 enum CurtyTheme {
-    static let panelCornerRadius: CGFloat = 24
+    static let panelCornerRadius: CGFloat = 20
     static let railWidth: CGFloat = 58
-    static let railButtonWidth: CGFloat = 48
-    static let railButtonHeight: CGFloat = 36
-    static let railButtonSpacing: CGFloat = 6
-    static let railButtonCornerRadius: CGFloat = 11
+    static let railButtonWidth: CGFloat = 46
+    static let railButtonHeight: CGFloat = 34
+    static let railButtonSpacing: CGFloat = 5
+    static let railButtonCornerRadius: CGFloat = 8
 
     /// Row actions sit in a fixed-width cluster so the file name always ends at
     /// the same place instead of being eaten by however many buttons a row has.
-    static let rowActionSize: CGFloat = 28
-    static let rowActionSpacing: CGFloat = 3
+    static let rowActionSize: CGFloat = 27
+    static let rowActionSpacing: CGFloat = 4
     /// Gap that isolates the destructive action, so a miss aimed at the button
     /// beside it does not land on "remove".
     static let rowActionDestructiveGap: CGFloat = 10
-    static let rowActionClusterWidth: CGFloat = 97
+    static let rowActionClusterWidth: CGFloat = 100
 
     /// One slot from the centre of one rail button to the next, used to turn a
     /// drag distance into how many places the icon has travelled.
@@ -25,13 +25,45 @@ enum CurtyTheme {
     /// Below this the pointer never left the icon, so the press is a click.
     static let railDragThreshold: CGFloat = 4
 
-    static let accent = Color(red: 0.95, green: 0.49, blue: 0.28)
-    static let warmBackground = Color(red: 0.97, green: 0.95, blue: 0.91)
-    static let warmSurface = Color(red: 1.00, green: 0.99, blue: 0.97)
-    static let darkBackground = Color(red: 0.075, green: 0.075, blue: 0.085)
-    static let darkSurface = Color(red: 0.12, green: 0.12, blue: 0.14)
-    static let darkRail = Color(red: 0.095, green: 0.095, blue: 0.11)
-    static let success = Color(red: 0.25, green: 0.68, blue: 0.48)
+    // MARK: - Материал
+
+    /// Панель — передняя стенка прибора: графитовый анодированный алюминий.
+    /// Тёмный регистр здесь не «тёмная тема», а сам материал: панель свисает
+    /// поверх чужих окон, чаще всего тёмных, и светлая плита рядом с ними
+    /// читалась бы как чужеродная заплата.
+    static let panelTop = Color(red: 0.227, green: 0.231, blue: 0.239)
+    static let panelBottom = Color(red: 0.165, green: 0.169, blue: 0.176)
+    static let railTop = Color(red: 0.137, green: 0.141, blue: 0.149)
+    static let railBottom = Color(red: 0.110, green: 0.114, blue: 0.122)
+
+    /// Утопленная плита: та же поверхность, но вдавленная в панель.
+    static let plateTop = Color(red: 0.180, green: 0.184, blue: 0.192)
+    static let plateBottom = Color(red: 0.200, green: 0.204, blue: 0.216)
+
+    /// Приподнятая клавиша.
+    static let keyTop = Color(red: 0.271, green: 0.275, blue: 0.290)
+    static let keyBottom = Color(red: 0.216, green: 0.220, blue: 0.231)
+
+    /// Прорезь под ползунок — самое тёмное место панели.
+    static let groove = Color(red: 0.125, green: 0.129, blue: 0.137)
+
+    // MARK: - Свет
+
+    /// Янтарь горящей лампы. Он же заливка главного действия: в приборе
+    /// светится ровно то, что сейчас работает.
+    static let accent = Color(red: 0.941, green: 0.659, blue: 0.118)
+    static let accentDeep = Color(red: 0.784, green: 0.506, blue: 0.082)
+    /// Зелёная лампа «в порядке».
+    static let success = Color(red: 0.310, green: 0.663, blue: 0.416)
+    /// Красная лампа: разрушающее действие.
+    static let danger = Color(red: 0.804, green: 0.318, blue: 0.259)
+
+    /// Гравировка. Основная подпись светлая и тёплая, вторичная — приглушённая
+    /// того же тона: серого из ниоткуда на приборной панели не бывает.
+    static let engraved = Color(red: 0.937, green: 0.914, blue: 0.863)
+    static let engravedDim = Color(red: 0.655, green: 0.635, blue: 0.588)
+    /// Тонкая риска, которой панель делится на секции.
+    static let scribe = Color.white.opacity(0.14)
 
     /// Знак приложения, заранее уменьшенный до размера, близкого к экранному:
     /// пересчёт с тысячи пикселей на лету рвал край. Читается один раз —
@@ -42,11 +74,121 @@ enum CurtyTheme {
     }()
 }
 
-/// Системные кнопки и переключатели macOS рисуются графитом, пока окно не
-/// станет ключевым, а панель специально не забирает фокус при наведении.
-/// Сказать им обратное через controlActiveState не выходит — они читают
-/// состояние окна напрямую. Поэтому акцентные контролы Curty рисует сама:
-/// обычная заливка Color от активности окна не зависит.
+// MARK: - Поверхности
+
+/// Отлив шлифованного металла.
+///
+/// Сначала это были настоящие риски — линии через каждые три пункта. На бумаге
+/// приём верный, на экране он превратился в полоски: глаз на таком расстоянии
+/// различает каждую и читает их как грязь, а не как фактуру. Настоящий
+/// анодированный алюминий с полуметра выглядит иначе — не линиями, а мягкими
+/// продольными полосами света, широкими и почти незаметными по отдельности.
+/// Здесь ровно они: несколько размытых лент поперёк панели, без единой линии.
+struct BrushedFinish: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(0.000), location: 0.00),
+                .init(color: .white.opacity(0.022), location: 0.13),
+                .init(color: .black.opacity(0.018), location: 0.27),
+                .init(color: .white.opacity(0.016), location: 0.44),
+                .init(color: .black.opacity(0.022), location: 0.61),
+                .init(color: .white.opacity(0.020), location: 0.78),
+                .init(color: .black.opacity(0.014), location: 0.92),
+                .init(color: .white.opacity(0.000), location: 1.00),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+extension View {
+    /// Приподнятая поверхность: светлая кромка сверху, тень снизу.
+    func raisedSurface(cornerRadius: CGFloat = 7) -> some View {
+        background(
+            LinearGradient(
+                colors: [CurtyTheme.keyTop, CurtyTheme.keyBottom],
+                startPoint: .top, endPoint: .bottom
+            ),
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.16), .black.opacity(0.28)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.45), radius: 3, y: 2)
+    }
+
+    /// Утопленная плита: тень падает внутрь, по нижней кромке — блик.
+    func recessedPlate(cornerRadius: CGFloat = 10) -> some View {
+        background(
+            LinearGradient(
+                colors: [CurtyTheme.plateTop, CurtyTheme.plateBottom],
+                startPoint: .top, endPoint: .bottom
+            ),
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.black.opacity(0.45), .white.opacity(0.10)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    /// Подсвеченная гравировка: тёплый ореол вокруг светлой буквы.
+    func litEngraving(_ strength: Double = 0.22) -> some View {
+        shadow(color: CurtyTheme.accent.opacity(strength), radius: 6)
+    }
+}
+
+/// Подпись, гравированная на панели: прописные, разрежённые, приглушённые.
+struct Legend: View {
+    let text: String
+    var size: CGFloat = 9
+    var tint: Color = CurtyTheme.engravedDim
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: size, weight: .semibold))
+            .tracking(1.6)
+            .foregroundStyle(tint)
+    }
+}
+
+/// Лампа-аннунциатор. Горящая светится и отбрасывает ореол, погасшая — тёмное
+/// углубление: в приборе выключенное видно так же ясно, как включённое.
+struct Lamp: View {
+    var isLit: Bool
+    var colour: Color = CurtyTheme.accent
+    var size: CGFloat = 7
+
+    var body: some View {
+        Circle()
+            .fill(isLit ? colour : Color.black.opacity(0.55))
+            .frame(width: size, height: size)
+            .overlay(
+                Circle().strokeBorder(.white.opacity(isLit ? 0.45 : 0.06), lineWidth: 0.5)
+            )
+            .shadow(color: isLit ? colour.opacity(0.9) : .clear, radius: isLit ? 5 : 0)
+    }
+}
+
+// MARK: - Кнопки
+
+/// Главное действие — единственная клавиша, залитая светом.
 struct CurtyProminentButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Rendered(configuration: configuration)
@@ -58,29 +200,44 @@ struct CurtyProminentButtonStyle: ButtonStyle {
         @State private var isHovering = false
 
         var body: some View {
+            let pressed = configuration.isPressed
+
             configuration.label
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Color(red: 0.13, green: 0.10, blue: 0.03))
                 .padding(.horizontal, 11)
                 .padding(.vertical, 5)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(CurtyTheme.accent.opacity(fill))
+                    LinearGradient(
+                        colors: pressed
+                            ? [CurtyTheme.accentDeep, CurtyTheme.accentDeep]
+                            : [CurtyTheme.accent, CurtyTheme.accentDeep],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(.white.opacity(pressed ? 0.14 : 0.34), lineWidth: 1)
+                )
+                // Нажатая клавиша уходит внутрь: ореол гаснет, сама клавиша
+                // сдвигается на пункт вниз.
+                .shadow(
+                    color: CurtyTheme.accent.opacity(isHovering && !pressed ? 0.45 : 0.25),
+                    radius: pressed ? 0 : 7
+                )
+                .offset(y: pressed ? 1 : 0)
                 .contentShape(Rectangle())
-                .opacity(isEnabled ? 1 : 0.45)
+                .opacity(isEnabled ? 1 : 0.35)
+                .saturation(isEnabled ? 1 : 0)
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
                 }
         }
-
-        private var fill: Double {
-            if configuration.isPressed { return 0.72 }
-            return isHovering && isEnabled ? 1 : 0.9
-        }
     }
 }
 
+/// Обычная клавиша: приподнятый металл.
 struct CurtySecondaryButtonStyle: ButtonStyle {
     var isDestructive = false
 
@@ -95,58 +252,318 @@ struct CurtySecondaryButtonStyle: ButtonStyle {
         @State private var isHovering = false
 
         var body: some View {
+            let pressed = configuration.isPressed
+
             configuration.label
-                .font(.caption.weight(.medium))
-                .foregroundStyle(isDestructive ? Color.red : .primary)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(isDestructive ? CurtyTheme.danger : CurtyTheme.engraved)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 5)
-                .background(
+                .raisedSurface()
+                .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(.primary.opacity(fill))
+                        .strokeBorder(
+                            isDestructive
+                                ? CurtyTheme.danger.opacity(isHovering ? 0.55 : 0.28)
+                                : .white.opacity(isHovering ? 0.22 : 0),
+                            lineWidth: 1
+                        )
                 )
+                .brightness(isHovering && !pressed ? 0.05 : 0)
+                .offset(y: pressed ? 1 : 0)
                 .contentShape(Rectangle())
-                .opacity(isEnabled ? 1 : 0.45)
+                .opacity(isEnabled ? 1 : 0.35)
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
                 }
         }
-
-        private var fill: Double {
-            if configuration.isPressed { return 0.18 }
-            return isHovering && isEnabled ? 0.13 : 0.075
-        }
     }
 }
 
-/// Переключатель по той же причине нарисован вручную: системный NSSwitch
-/// теряет акцент вместе с окном.
+/// Тумблер: клавиша с лампой и словом. Системный NSSwitch рисуется графитом,
+/// пока окно не станет ключевым, а панель специально не забирает фокус, —
+/// он выглядел бы вечно потухшим. Кнопка, а не жест: так он доступен с
+/// клавиатуры и VoiceOver.
 struct CurtySwitch: View {
     @Binding var isOn: Bool
     var isEnabled = true
 
+    @State private var isHovering = false
+
     var body: some View {
-        // Именно Button, а не жест: так переключатель доступен с клавиатуры и
-        // VoiceOver, чего у самодельного тумблера на onTapGesture не было.
         Button {
-            withAnimation(.easeOut(duration: 0.16)) { isOn.toggle() }
+            withAnimation(.easeOut(duration: 0.14)) { isOn.toggle() }
         } label: {
-            Capsule()
-                .fill(isOn ? CurtyTheme.accent : Color.primary.opacity(0.22))
-                .frame(width: 34, height: 20)
-                .overlay(alignment: isOn ? .trailing : .leading) {
-                    Circle()
-                        .fill(.white)
-                        .padding(2)
-                        .shadow(color: .black.opacity(0.22), radius: 1, y: 0.5)
-                }
-                .contentShape(Rectangle())
+            HStack(spacing: 5) {
+                Lamp(isLit: isOn && isEnabled, size: 6)
+                Text(isOn ? "ВКЛ" : "ВЫКЛ")
+                    .font(.system(size: 8, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(isOn ? CurtyTheme.engraved : CurtyTheme.engravedDim)
+                    .frame(width: 32, alignment: .leading)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .raisedSurface(cornerRadius: 6)
+            .brightness(isHovering && isEnabled ? 0.05 : 0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.45)
+        .opacity(isEnabled ? 1 : 0.4)
+        .onHover { isHovering = $0 }
         .accessibilityValue(isOn ? "включено" : "выключено")
     }
 }
+
+// MARK: - Плиты и строки
+
+/// Плита прибора. Имя прежнее — им пользуется полтора десятка мест.
+struct CurtyCard<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .recessedPlate()
+    }
+}
+
+/// Секция с гравированной подписью на кромке — так подписан любой блок
+/// приборной панели. Заменяет собой безымянную карточку.
+struct CurtySection<Content: View>: View {
+    let title: String
+    var fillsHeight = false
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Legend(text: title)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: fillsHeight ? .infinity : nil, alignment: .top)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxHeight: fillsHeight ? .infinity : nil, alignment: .top)
+        .recessedPlate()
+    }
+}
+
+/// Строка списка. У выбранной горит лампа на кромке и светлеет поле, под
+/// курсором поле светлеет слабее. Ни рамок, ни пунктиров: в приборе состояние
+/// показывает свет.
+struct SelectableRow<Content: View>: View {
+    let isSelected: Bool
+    let isHovered: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Lamp(isLit: isSelected, size: 5)
+            content
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(.white.opacity(isSelected ? 0.09 : (isHovered ? 0.05 : 0.025)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(.white.opacity(isSelected ? 0.16 : 0.05), lineWidth: 1)
+        )
+    }
+}
+
+/// Пустое состояние: не провал в панели, а погашенный её участок — вычерченная
+/// рамка, приглушённый знак и одна строка о том, что этот блок зажжёт.
+struct DrawnEmptyState: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Spacer(minLength: 0)
+
+            Image(systemName: icon)
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(CurtyTheme.engravedDim)
+                .frame(width: 54, height: 54)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(.white.opacity(0.10), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
+
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(CurtyTheme.engraved)
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundStyle(CurtyTheme.engravedDim)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 18)
+        .recessedPlate()
+    }
+}
+
+/// Секция списка во всю доступную высоту: у прибора нет полупустых блоков,
+/// границы у каждого свои независимо от того, сколько внутри строк.
+struct CurtyListPane<Content: View>: View {
+    var footer: String?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                content
+                    .padding(7)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .scrollContentBackground(.hidden)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let footer {
+                Rectangle().fill(CurtyTheme.scribe).frame(height: 1)
+                Legend(text: footer, size: 8)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .recessedPlate()
+    }
+}
+
+/// Полоса управления над списком.
+struct CurtyStrip<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .recessedPlate(cornerRadius: 8)
+    }
+}
+
+// MARK: - Подтверждение
+
+/// Клавиша разрушающего действия: та же форма, что у главной, но залита
+/// красным. В приборе цвет здесь не украшение — это лампа аварии.
+struct CurtyDangerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Rendered(configuration: configuration)
+    }
+
+    private struct Rendered: View {
+        let configuration: Configuration
+        @State private var isHovering = false
+
+        var body: some View {
+            let pressed = configuration.isPressed
+
+            configuration.label
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Color(red: 1, green: 0.94, blue: 0.92))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(
+                    LinearGradient(
+                        colors: [CurtyTheme.danger, CurtyTheme.danger.opacity(0.78)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(.white.opacity(isHovering ? 0.5 : 0.3), lineWidth: 1)
+                )
+                .shadow(color: CurtyTheme.danger.opacity(pressed ? 0 : (isHovering ? 0.55 : 0.3)), radius: 7)
+                .offset(y: pressed ? 1 : 0)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+                }
+        }
+    }
+}
+
+/// Съёмная плита с вопросом, лежащая поверх погашенной панели. Системный
+/// `confirmationDialog` оформить нельзя — его рисует macOS, и посреди
+/// графита он выглядел чужой белой карточкой.
+struct CurtyConfirmationPlate: View {
+    let confirmation: PendingConfirmation
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Панель гаснет, но не прячется: человек видит, к чему вопрос.
+            Color.black.opacity(0.55)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onDismiss)
+
+            VStack(alignment: .leading, spacing: 9) {
+                Text(confirmation.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CurtyTheme.engraved)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(confirmation.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(CurtyTheme.engravedDim)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 9) {
+                    Spacer(minLength: 0)
+                    Button("Отмена", action: onDismiss)
+                        .buttonStyle(CurtySecondaryButtonStyle())
+                    Button(confirmation.actionTitle) {
+                        confirmation.perform()
+                        onDismiss()
+                    }
+                    .buttonStyle(CurtyDangerButtonStyle())
+                }
+                .padding(.top, 3)
+            }
+            .padding(16)
+            .frame(width: 296)
+            .background(
+                LinearGradient(
+                    colors: [CurtyTheme.keyTop, CurtyTheme.keyBottom],
+                    startPoint: .top, endPoint: .bottom
+                ),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.22), .black.opacity(0.35)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: .black.opacity(0.6), radius: 18, y: 8)
+        }
+    }
+}
+
+// MARK: - Строки состояния
 
 /// Ошибку записи некуда деть, кроме экрана: без неё пользователь узнаёт о
 /// потерянной заметке через часы, когда восстанавливать уже нечего.
@@ -155,9 +572,11 @@ struct CurtyErrorRow: View {
     var onDismiss: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
+        HStack(spacing: 8) {
+            Lamp(isLit: true, colour: CurtyTheme.danger, size: 7)
             Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(CurtyTheme.engraved)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
@@ -165,8 +584,16 @@ struct CurtyErrorRow: View {
                 CurtyRowButton(systemName: "xmark", title: "Скрыть сообщение", size: 20, glyphSize: 10, action: onDismiss)
             }
         }
-        .font(.caption)
-        .foregroundStyle(.red)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CurtyTheme.danger.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(CurtyTheme.danger.opacity(0.4), lineWidth: 1)
+        )
     }
 }
 
@@ -178,18 +605,19 @@ struct CurtyUndoBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(CurtyTheme.accent)
             Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(CurtyTheme.engraved)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Button("Отменить", action: onUndo)
                 .buttonStyle(CurtySecondaryButtonStyle())
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .recessedPlate(cornerRadius: 8)
         .transition(.opacity)
     }
 }
@@ -217,6 +645,13 @@ struct CurtyRowButton: View {
 
     private var isLit: Bool { isHovering && isEnabled }
 
+    private var tint: Color {
+        if isConfirming { return CurtyTheme.success }
+        guard isEnabled else { return CurtyTheme.engravedDim }
+        if isDestructive { return isLit ? CurtyTheme.danger : CurtyTheme.engravedDim }
+        return isLit ? CurtyTheme.accent : CurtyTheme.engravedDim
+    }
+
     var body: some View {
         Button {
             action()
@@ -228,13 +663,15 @@ struct CurtyRowButton: View {
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: size, height: size)
                 .background(
-                    RoundedRectangle(cornerRadius: size / 4, style: .continuous)
-                        .fill(isConfirming ? CurtyTheme.success.opacity(0.18) : (isLit ? tint.opacity(0.16) : .clear))
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(.white.opacity(isLit || isConfirming ? 0.08 : 0))
                 )
+                .shadow(color: tint.opacity(isLit || isConfirming ? 0.35 : 0), radius: 5)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
         }
@@ -256,13 +693,6 @@ struct CurtyRowButton: View {
             withAnimation(.easeOut(duration: 0.2)) { isConfirming = false }
         }
     }
-
-    private var tint: Color {
-        if isConfirming { return CurtyTheme.success }
-        guard isEnabled else { return .secondary }
-        if isDestructive { return isHovering ? .red : .secondary }
-        return isHovering ? CurtyTheme.accent : .secondary
-    }
 }
 
 /// Какую строку подсветить галочкой и каким по счёту разом. Одно и то же
@@ -280,9 +710,11 @@ struct RowCopyConfirmation: Equatable {
     func token(for id: UUID) -> UUID? { itemID == id ? token : nil }
 }
 
-/// Рамка поля ввода. Системная обводка фокуса синяя и к оформлению панели
-/// отношения не имеет, поэтому рисуем свою: в покое еле заметную, в фокусе —
-/// акцентную.
+// MARK: - Поля ввода
+
+/// Окно ввода вырезано в панели: тень падает внутрь, а в фокусе по кромке
+/// зажигается тонкая янтарная линия — то же, что делает подсветка шкалы.
+/// Системная обводка фокуса синяя и к прибору отношения не имеет.
 private struct CurtyFieldChrome: ViewModifier {
     let isFocused: Bool
     let cornerRadius: CGFloat
@@ -291,26 +723,27 @@ private struct CurtyFieldChrome: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.primary.opacity(isFocused ? 0.09 : 0.055))
+                    .fill(CurtyTheme.groove)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(
-                        isFocused ? CurtyTheme.accent : .primary.opacity(0.10),
-                        lineWidth: isFocused ? 1.5 : 1
+                        isFocused ? CurtyTheme.accent.opacity(0.7) : .black.opacity(0.5),
+                        lineWidth: 1
                     )
             )
+            .shadow(color: CurtyTheme.accent.opacity(isFocused ? 0.25 : 0), radius: 5)
             .animation(.easeOut(duration: 0.14), value: isFocused)
     }
 }
 
 extension View {
-    func curtyFieldChrome(isFocused: Bool, cornerRadius: CGFloat = 9) -> some View {
+    func curtyFieldChrome(isFocused: Bool, cornerRadius: CGFloat = 7) -> some View {
         modifier(CurtyFieldChrome(isFocused: isFocused, cornerRadius: cornerRadius))
     }
 }
 
-/// Hover feedback for controls that draw themselves — system buttons, switches —
+/// Hover feedback for controls that draw themselves — switches above all —
 /// where a background of our own cannot be slipped underneath.
 private struct CurtyHoverLift: ViewModifier {
     var scale: CGFloat
@@ -318,7 +751,7 @@ private struct CurtyHoverLift: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .brightness(isHovering ? 0.09 : 0)
+            .brightness(isHovering ? 0.06 : 0)
             .scaleEffect(isHovering ? scale : 1)
             .onHover { hovering in
                 withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
@@ -329,27 +762,5 @@ private struct CurtyHoverLift: ViewModifier {
 extension View {
     func curtyHoverLift(scale: CGFloat = 1.04) -> some View {
         modifier(CurtyHoverLift(scale: scale))
-    }
-}
-
-struct CurtyCard<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
-    private let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(colorScheme == .dark ? CurtyTheme.darkSurface : CurtyTheme.warmSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(.primary.opacity(colorScheme == .dark ? 0.08 : 0.06))
-            )
     }
 }

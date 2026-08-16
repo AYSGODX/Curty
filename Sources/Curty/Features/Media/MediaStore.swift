@@ -39,6 +39,18 @@ enum MediaVolumePolicy {
     }
 }
 
+/// Какие команды меняют состояние на экране сразу, не дожидаясь опроса.
+/// Плеер отвечает не мгновенно, а опрос идёт раз в секунду: без этого значок
+/// паузы менялся с задержкой до секунды, человек считал, что промахнулся, и
+/// жал второй раз — возвращая всё обратно.
+enum MediaOptimisticPolicy {
+    static func applying(_ command: MediaCommand, to snapshot: MediaSnapshot?) -> MediaSnapshot? {
+        guard command == .togglePlayPause, var updated = snapshot else { return nil }
+        updated.isPlaying.toggle()
+        return updated
+    }
+}
+
 private enum PlayerKind: CaseIterable {
     case spotify
     case music
@@ -363,7 +375,11 @@ final class MediaStore: ObservableObject {
     }
     #endif
 
-    private func beginRequest(userInitiated: Bool = false) -> Bool {
+    /// Умолчания у `userInitiated` нет намеренно. Оно тут было — и из-за него
+    /// команды плеера годами уходили в канал как обычный опрос: нажатие,
+    /// попавшее на секундный опрос, молча пропадало. Теперь каждый вызывающий
+    /// обязан сказать, человек это или часы.
+    private func beginRequest(userInitiated: Bool) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
         if isRefreshing {
             let preemptsPoll = userInitiated && !isUserRequestInFlight
@@ -377,7 +393,7 @@ final class MediaStore: ObservableObject {
     }
 
     func refresh() {
-        guard isEnabled, beginRequest() else { return }
+        guard isEnabled, beginRequest(userInitiated: false) else { return }
         let adapter = self.adapter
         let requestGeneration = generation
         queue.async { [weak self] in
@@ -403,7 +419,7 @@ final class MediaStore: ObservableObject {
     }
 
     func requestAutomationAccess() {
-        guard isEnabled, beginRequest() else { return }
+        guard isEnabled, beginRequest(userInitiated: false) else { return }
         let adapter = self.adapter
         let requestGeneration = generation
         queue.async { [weak self] in
@@ -428,7 +444,15 @@ final class MediaStore: ObservableObject {
     // очередь напрямую, и каждое нажатие по молчащему плееру добавляло ещё один
     // застрявший вызов — ровно тот отказ, от которого beginRequest и защищает.
     func perform(_ command: MediaCommand) {
-        guard isEnabled, let source = snapshot?.source, beginRequest() else { return }
+        guard isEnabled, let source = snapshot?.source, beginRequest(userInitiated: true) else { return }
+
+        // Состояние переключаем сразу, опрос через секунду подтвердит.
+        if let optimistic = MediaOptimisticPolicy.applying(command, to: snapshot) {
+            snapshot = optimistic
+            // Отсчёт позиции начинается заново от текущей: без этого пауза
+            // «доматывала» бы трек на время, пока он стоял.
+            snapshotAt = Date()
+        }
         let adapter = self.adapter
         let requestGeneration = generation
         queue.async { [weak self] in

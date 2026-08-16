@@ -1,5 +1,29 @@
 import SwiftUI
 
+// ДОГОВОР О НАПРАВЛЕНИИ — «Ночной прибор»
+//
+// ЗАМЫСЕЛ: Curty — не окно, а передняя панель прибора, подвешенная под вырезом
+// экрана. Отказ: тёмная стеклянная панель с системными значками и системным
+// акцентом, то есть то, чем Curty была и чем является каждая вторая утилита
+// строки меню; отказ и от ряженья под старину — прибор не костюм, а вещь.
+// СВОЙ МИР: графитовый анодированный алюминий с продольной шлифовкой; плиты
+// вдавлены в панель, клавиши приподняты над ней. Свет ровно один — янтарный:
+// горящая лампа, залитая клавиша главного действия, тонкая линия по кромке
+// поля в фокусе. Зелёная лампа — «в порядке», красная — разрушающее действие.
+// Подписи гравированы: прописные, разрежённые, тёплого белого тона; серого из
+// ниоткуда нет, приглушённый текст того же тёплого тона. Единственная краска
+// помимо янтаря — оранжевая плитка знака «C», её трогать нельзя.
+// РАССКАЗ: человек подводит курсор к вырезу, читает состояние по свету — что
+// горит, то и работает — и уходит обратно в свою работу, ничего не переключив.
+// ПЕРВЫЙ ЭКРАН: слева тёмный рельс-колонка с лампой у каждого инструмента,
+// горит одна; сверху плитка знака. Справа гравированный заголовок под риской,
+// под ним утопленная плита во всю высоту с обложкой в 132 пункта, клавишами
+// плеера и шкалой с делениями; в подвале — лампа состояния и выключатель.
+// ФОРМА: выбран человеком из семи нарисованных макетов, четвёртый в череде.
+// ЗАВЕРШЕНИЕ: unreviewed and undocumented is unfinished; this build ends with
+// the finish review, the verdict, DESIGN.md, and every shipping raster carrying
+// its provenance.
+
 private struct RailDrag: Equatable {
     let tool: AppModel.Tool
     let originIndex: Int
@@ -13,7 +37,6 @@ private struct RailDrag: Equatable {
 }
 
 struct PanelRootView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: AppModel
     @State private var drag: RailDrag?
     @State private var isDropTarget = false
@@ -22,14 +45,17 @@ struct PanelRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             toolRail
+
             VStack(spacing: 0) {
                 header
+
                 if model.preferences.shouldAskAboutLaunchAtLogin {
                     launchAtLoginPrompt
                         .padding(.horizontal, 14)
                         .padding(.bottom, 10)
                         .transition(.opacity)
                 }
+
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -39,11 +65,33 @@ struct PanelRootView: View {
         // системным акцентом — у большинства он синий и к панели отношения не
         // имеет. Задаётся один раз на всю панель, включая будущие поля.
         .tint(CurtyTheme.accent)
-        .background(colorScheme == .dark ? CurtyTheme.darkBackground : CurtyTheme.warmBackground)
+        // Панель тёмная всегда: это материал, а не тема оформления. Светлая
+        // плита рядом с чужими тёмными окнами читалась бы как заплата.
+        .background(
+            LinearGradient(
+                colors: [CurtyTheme.panelTop, CurtyTheme.panelBottom],
+                startPoint: .top, endPoint: .bottom
+            )
+        )
+        .overlay(BrushedFinish())
+        // Мягкий блик сверху слева — свет, падающий на металл.
+        .overlay(
+            RadialGradient(
+                colors: [.white.opacity(0.07), .clear],
+                center: .init(x: 0.3, y: -0.1), startRadius: 0, endRadius: 460
+            )
+            .allowsHitTesting(false)
+        )
         .clipShape(RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
-                .strokeBorder(.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.22), .black.opacity(0.55)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
         )
         // Escape доходит только когда панель уже стала ключевой, то есть после
         // клика по ней. Остальные случаи закрывает щелчок мимо панели.
@@ -59,13 +107,19 @@ struct PanelRootView: View {
             return true
         } isTargeted: { isDropTarget = $0 }
         .overlay {
+            if let confirmation = model.pendingConfirmation {
+                CurtyConfirmationPlate(confirmation: confirmation) {
+                    model.pendingConfirmation = nil
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: model.pendingConfirmation?.id)
+        .overlay {
             if isDropTarget {
                 RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
-                    .strokeBorder(CurtyTheme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
-                    .background(
-                        CurtyTheme.accent.opacity(0.07),
-                        in: RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
-                    )
+                    .strokeBorder(CurtyTheme.accent, lineWidth: 2)
+                    .shadow(color: CurtyTheme.accent.opacity(0.5), radius: 10)
                     .allowsHitTesting(false)
             }
         }
@@ -95,15 +149,35 @@ struct PanelRootView: View {
         }
     }
 
-    private func railTint(isSelected: Bool, isHovered: Bool) -> Color {
-        if isSelected { return .white }
-        return isHovered ? .primary : .secondary
-    }
-
-    private func railBackground(isSelected: Bool, isLifted: Bool, isHovered: Bool) -> Color {
-        if isSelected { return CurtyTheme.accent }
-        if isLifted { return .primary.opacity(0.14) }
-        return isHovered ? .primary.opacity(0.09) : .clear
+    /// Кнопка инструмента. Отдельной лампы у неё нет: рядом со знаком точка
+    /// читалась как сор, а не как прибор. Светится сам знак — выбранный горит
+    /// янтарём на приподнятой клавише, остальные лежат в панели приглушёнными.
+    @ViewBuilder
+    private func railGlyph(_ section: AppModel.Tool, isSelected: Bool, isHovered: Bool) -> some View {
+        Image(systemName: section.symbol)
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(isSelected ? CurtyTheme.accent : CurtyTheme.engravedDim)
+            .shadow(color: CurtyTheme.accent.opacity(isSelected ? 0.5 : 0), radius: 6)
+            .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [CurtyTheme.keyTop, CurtyTheme.keyBottom],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
+                            .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                    )
+            } else if isHovered {
+                RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
+                    .fill(.white.opacity(0.06))
+            }
+        }
+        .contentShape(Rectangle())
     }
 
     private func toolButton(_ section: AppModel.Tool, at index: Int) -> some View {
@@ -111,26 +185,12 @@ struct PanelRootView: View {
         let isSelected = model.selectedTool == section
         let offsetY = railOffset(for: section, at: index)
 
-        return Image(systemName: section.symbol)
-            .font(.system(size: 15, weight: .medium))
-            .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
-            .foregroundStyle(railTint(isSelected: isSelected, isHovered: hoveredTool == section))
-            .background(
-                RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
-                    .fill(railBackground(
-                        isSelected: isSelected,
-                        isLifted: isLifted,
-                        isHovered: hoveredTool == section
-                    ))
-            )
+        return railGlyph(section, isSelected: isSelected, isHovered: hoveredTool == section)
             .onHover { hovering in
                 withAnimation(.easeOut(duration: 0.12)) { setHover(section, hovering) }
             }
-            // A frame alone is not hit-testable where it is transparent, so
-            // without this only the glyph itself would answer the pointer.
-            .contentShape(Rectangle())
-            .scaleEffect(isLifted ? 1.08 : 1)
-            .shadow(color: .black.opacity(isLifted ? 0.35 : 0), radius: isLifted ? 7 : 0, y: isLifted ? 3 : 0)
+            .scaleEffect(isLifted ? 1.06 : 1)
+            .shadow(color: .black.opacity(isLifted ? 0.55 : 0), radius: isLifted ? 8 : 0, y: isLifted ? 3 : 0)
             .offset(y: offsetY)
             // The icon under the pointer must not lag behind it, so only the
             // ones stepping aside are animated.
@@ -180,31 +240,37 @@ struct PanelRootView: View {
 
     private var toolRail: some View {
         VStack(spacing: CurtyTheme.railButtonSpacing) {
-            // Плитку рисует приложение, а в бандле лежит только знак без фона:
-            // так его размер можно подогнать под соседние значки. Запасной
-            // вариант на случай пропавшего файла — прежний символ.
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(CurtyTheme.accent)
+            // Плитка — то же лицо, что у иконки приложения: графит с
+            // выгравированным янтарным знаком. Рисовать её здесь заново нечем,
+            // да и незачем: в бандле лежит готовая уменьшенная копия, и знак в
+            // рельсе совпадает со знаком в доке до последней тени.
+            Group {
                 if let logo = CurtyTheme.logo {
-                    // Не во всю плитку: «C» — сплошная фигура, и в полный рост
-                    // она выглядит ярче тонких значков инструментов под ней. Но
-                    // и уменьшать сильно нельзя — вырез перестаёт читаться как
-                    // вырез и превращается в точку. Двадцать восемь — середина.
                     Image(nsImage: logo)
                         .resizable()
-                        .scaledToFit()
-                        .frame(width: 28, height: 28)
+                        .interpolation(.high)
                 } else {
-                    Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(CurtyTheme.keyTop)
+                        .overlay(
+                            Image(systemName: "c.circle")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(CurtyTheme.accent)
+                        )
                 }
             }
             .frame(width: 36, height: 36)
+            .shadow(color: CurtyTheme.accent.opacity(0.28), radius: 8)
             .help("Curty")
 
-            Spacer().frame(height: 3)
+            // Знак — шильдик прибора, а не восьмой инструмент. Он отделён от
+            // колонки риской и воздухом: стоя вплотную, он читался как ещё
+            // одна кнопка в ряду.
+            Rectangle()
+                .fill(CurtyTheme.scribe)
+                .frame(width: CurtyTheme.railButtonWidth, height: 1)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
 
             ForEach(Array(model.orderedTools.enumerated()), id: \.element) { index, section in
                 toolButton(section, at: index)
@@ -212,42 +278,49 @@ struct PanelRootView: View {
 
             Spacer(minLength: 4)
 
+            // Риска отделяет служебный автомат от рабочих — так же, как на
+            // настоящей колонке.
+            Rectangle()
+                .fill(CurtyTheme.scribe)
+                .frame(width: CurtyTheme.railButtonWidth, height: 1)
+                .padding(.bottom, 4)
+
             // Settings live inside the panel: a separate window would drag the
             // user to whichever Space it happens to sit on.
             Button {
-                withAnimation(.easeOut(duration: 0.16)) {
-                    model.select(.settings)
-                }
+                withAnimation(.easeOut(duration: 0.16)) { model.select(.settings) }
             } label: {
-                Image(systemName: AppModel.Tool.settings.symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: CurtyTheme.railButtonWidth, height: CurtyTheme.railButtonHeight)
-                    .foregroundStyle(railTint(
-                        isSelected: model.selectedTool == .settings,
-                        isHovered: hoveredTool == .settings
-                    ))
-                    .background(
-                        RoundedRectangle(cornerRadius: CurtyTheme.railButtonCornerRadius, style: .continuous)
-                            .fill(railBackground(
-                                isSelected: model.selectedTool == .settings,
-                                isLifted: false,
-                                isHovered: hoveredTool == .settings
-                            ))
-                    )
-                    .contentShape(Rectangle())
-                    .onHover { hovering in
-                        withAnimation(.easeOut(duration: 0.12)) { setHover(.settings, hovering) }
-                    }
+                railGlyph(
+                    .settings,
+                    isSelected: model.selectedTool == .settings,
+                    isHovered: hoveredTool == .settings
+                )
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.12)) { setHover(.settings, hovering) }
+                }
             }
             .buttonStyle(.plain)
             .help("Настройки")
             .accessibilityLabel("Настройки")
         }
+        // Колонке отступ под вырез не нужен: вырез накрывает середину экрана, а
+        // рельс от него левее — проверено замером. Отступ остаётся только у
+        // заголовка, у которого длинные названия хвостом уходят в вырез.
         .padding(.vertical, 12)
         .frame(width: CurtyTheme.railWidth)
-        .background(colorScheme == .dark ? CurtyTheme.darkRail : Color.black.opacity(0.035))
+        .background(
+            LinearGradient(
+                colors: [CurtyTheme.railTop, CurtyTheme.railBottom],
+                startPoint: .top, endPoint: .bottom
+            )
+        )
+        .overlay(BrushedFinish().opacity(0.7))
         .overlay(alignment: .trailing) {
-            Rectangle().fill(.primary.opacity(0.07)).frame(width: 1)
+            // Кромка между колонкой и панелью: тень и следом блик.
+            HStack(spacing: 0) {
+                Rectangle().fill(.black.opacity(0.5)).frame(width: 1)
+                Rectangle().fill(.white.opacity(0.07)).frame(width: 1)
+            }
         }
     }
 
@@ -256,13 +329,14 @@ struct PanelRootView: View {
     /// ждут, а карточка в панели попадается на глаза тогда, когда человек сам
     /// пришёл к Curty.
     private var launchAtLoginPrompt: some View {
-        CurtyCard {
+        CurtySection(title: "Запуск") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Запускать Curty при входе в систему?")
                     .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(CurtyTheme.engraved)
                 Text("После перезагрузки она не вернётся сама, а найти её через поиск macOS не даст: приложения без окна она не показывает.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 8) {
@@ -272,7 +346,6 @@ struct PanelRootView: View {
                         }
                     }
                     .buttonStyle(CurtyProminentButtonStyle())
-                    .curtyHoverLift()
 
                     Button("Не нужно") {
                         withAnimation(.easeOut(duration: 0.18)) {
@@ -280,29 +353,37 @@ struct PanelRootView: View {
                         }
                     }
                     .buttonStyle(CurtySecondaryButtonStyle())
-                    .curtyHoverLift()
 
                     Spacer(minLength: 0)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    /// Заголовок гравирован прямо по панели и подсвечен: это шильдик прибора,
+    /// а не строка приложения. Прежняя подпись «Curty» под названием раздела
+    /// убрана — знак стоит в колонке, повторять его словом незачем.
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.selectedTool.title)
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
-                Text("Curty")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(model.selectedTool.title.uppercased())
+                .font(.system(size: 15, weight: .bold))
+                .tracking(3)
+                .foregroundStyle(CurtyTheme.engraved)
+                .litEngraving()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 16)
+        .padding(.top, 14 + model.notchInset)
+        .padding(.bottom, 9)
+        .overlay(alignment: .bottom) {
+            // Риска: тонкая тень и следом блик — так выглядит прорезанная
+            // в металле линия.
+            VStack(spacing: 0) {
+                Rectangle().fill(.black.opacity(0.45)).frame(height: 1)
+                Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
+            }
+            .padding(.horizontal, 14)
+        }
     }
 
     @ViewBuilder
@@ -319,7 +400,9 @@ struct PanelRootView: View {
             case .settings: SettingsPane(model: model)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 10)
+        .foregroundStyle(CurtyTheme.engraved)
+        .padding(.horizontal, 14)
+        .padding(.top, 11)
+        .padding(.bottom, 11)
     }
 }
