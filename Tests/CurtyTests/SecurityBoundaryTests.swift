@@ -290,6 +290,25 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
+    /// Нажатие на паузу обязано менять состояние на экране немедленно.
+    /// Прежде оно ждало следующего опроса — до секунды, — и человек, решив,
+    /// что промахнулся, жал второй раз и возвращал всё обратно.
+    func testPlayPauseAnswersWithoutWaitingForThePoll() {
+        let playing = MediaSnapshot(
+            source: "Spotify", title: "Eyes Closed", artist: "Beartooth",
+            album: "Below", isPlaying: true, duration: 206, position: 121
+        )
+
+        let paused = MediaOptimisticPolicy.applying(.togglePlayPause, to: playing)
+        XCTAssertEqual(paused?.isPlaying, false)
+        XCTAssertEqual(paused?.position, 121, "позиция от паузы не двигается")
+
+        // Перемотка вперёд состояние воспроизведения не меняет, и выдумывать
+        // его до ответа плеера нечего.
+        XCTAssertNil(MediaOptimisticPolicy.applying(.next, to: playing))
+        XCTAssertNil(MediaOptimisticPolicy.applying(.togglePlayPause, to: nil))
+    }
+
     @MainActor
     func testUserActionIsNotSwallowedByAPollInFlight() {
         let store = MediaStore()

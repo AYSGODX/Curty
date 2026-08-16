@@ -49,21 +49,16 @@ struct SnippetsView: View {
                 .help("Новый сниппет")
             }
             if store.filteredItems.isEmpty {
-                CurtyCard {
-                    VStack(spacing: 8) {
-                        Image(systemName: "text.quote")
-                            .font(.system(size: 26, weight: .light))
-                        Text(store.query.isEmpty ? "Здесь будет ваш часто используемый текст" : "Ничего не найдено")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Сниппеты хранятся локально.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 92)
-                }
+                DrawnEmptyState(
+                    icon: "text.quote",
+                    title: store.query.isEmpty ? "Сниппетов пока нет" : "Ничего не найдено",
+                    detail: store.query.isEmpty
+                        ? "Сюда кладут текст, который надоело набирать:\nреквизиты, шаблоны ответов, куски кода."
+                        : "Попробуйте другое слово —\nпоиск идёт по названию и по тексту."
+                )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
+                CurtyListPane(footer: "сниппетов \(store.filteredItems.count)") {
+                    LazyVStack(spacing: 5) {
                         ForEach(store.filteredItems) { snippet in
                             HStack(spacing: 10) {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -71,7 +66,7 @@ struct SnippetsView: View {
                                         .font(.system(size: 12, weight: .semibold))
                                     Text(snippet.body)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(CurtyTheme.engravedDim)
                                         .lineLimit(2)
                                 }
                                 Spacer(minLength: 8)

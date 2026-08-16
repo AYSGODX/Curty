@@ -496,13 +496,19 @@ final class PanelController {
         closeWorkItem = nil
     }
 
+    /// Насколько корпус панели заходит под вырез. Панель ставится на десять
+    /// пунктов ниже верха экрана, а полоса выреза выше — значит под ней
+    /// оказывается разница. Экран без выреза сообщает ноль.
+    private static let panelTopOffset: CGFloat = 10
+
     private func position(on screen: NSScreen?) {
         guard let screen else { return }
         let origin = NSPoint(
             x: screen.frame.midX - panelSize.width / 2,
-            y: screen.frame.maxY - panelSize.height - 10
+            y: screen.frame.maxY - panelSize.height - Self.panelTopOffset
         )
         panel.setFrameOrigin(origin)
+        model.notchInset = max(0, screen.safeAreaInsets.top - Self.panelTopOffset)
     }
 
     private func screenUnderMouse() -> NSScreen? {

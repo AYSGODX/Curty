@@ -30,6 +30,15 @@ enum ToolOrderPolicy {
     }
 }
 
+/// Вопрос, заданный перед разрушающим действием.
+struct PendingConfirmation: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let perform: () -> Void
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     enum Tool: String, CaseIterable, Identifiable {
@@ -90,10 +99,36 @@ final class AppModel: ObservableObject {
     /// оказывается снаружи: панель уезжала, а меню оставалось висеть.
     @Published var isPresentingMenu = false
 
+    /// Заданный вопрос о разрушающем действии. Живёт в модели, а не в
+    /// экране: плита должна гасить всю панель целиком, включая рельс и
+    /// заголовок, — накрыв одну лишь область содержимого, она оставляла по
+    /// краям светлую рамку и читалась как сбой вёрстки.
+    @Published var pendingConfirmation: PendingConfirmation?
+
+    func confirm(
+        _ title: String,
+        detail: String,
+        actionTitle: String,
+        perform: @escaping () -> Void
+    ) {
+        pendingConfirmation = PendingConfirmation(
+            title: title, detail: detail, actionTitle: actionTitle, perform: perform
+        )
+    }
+
+    /// Сколько сверху съедает вырез экрана. Корпус панели нарочно заходит под
+    /// него, чтобы выглядеть подвешенным к самому вырезу, — но содержимое туда
+    /// заезжать не должно: заголовок раздела попадал прямо в вырез и пропадал.
+    /// На маках без выреза остаётся нулём.
+    @Published var notchInset: CGFloat = 0
+
     /// Панель остаётся на экране, даже если курсор ушёл. Проверка была
     /// размазана по трём местам, и добавить к ней четвёртую причину значило
     /// не забыть про каждое.
-    var keepsPanelOpen: Bool { isPinned || isPresentingDialog || isPresentingEditor || isPresentingMenu }
+    var keepsPanelOpen: Bool {
+        isPinned || isPresentingDialog || isPresentingEditor || isPresentingMenu
+            || pendingConfirmation != nil
+    }
 
     /// Wired by the panel controller, which owns the window itself.
     var onDialogPresentationChange: ((Bool) -> Void)?

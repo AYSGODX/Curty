@@ -7,7 +7,6 @@ struct SettingsPane: View {
     @ObservedObject private var model: AppModel
     @ObservedObject private var preferences: Preferences
     @ObservedObject private var updates: UpdateChecker
-    @State private var isConfirmingDeletion = false
 
     init(model: AppModel) {
         self.model = model
@@ -57,7 +56,7 @@ struct SettingsPane: View {
                               ? "exclamationmark.triangle.fill"
                               : "info.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(preferences.launchAtLoginState == .requiresApproval ? .orange : .secondary)
+                            .foregroundStyle(preferences.launchAtLoginState == .requiresApproval ? CurtyTheme.accent : CurtyTheme.engravedDim)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -91,7 +90,7 @@ struct SettingsPane: View {
                     Divider()
                     Text("Иконки в левом столбце можно перетаскивать, чтобы поставить нужный инструмент первым.")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CurtyTheme.engravedDim)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Вернуть исходный порядок") { model.resetToolOrder() }
@@ -102,11 +101,15 @@ struct SettingsPane: View {
                 section("Локальные данные") {
                     Text("Удаляет историю буфера, ссылки с полки, сниппеты и заметки с этого Mac.")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CurtyTheme.engravedDim)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Удалить все локальные данные") {
-                        isConfirmingDeletion = true
+                        model.confirm(
+                            "Удалить все локальные данные?",
+                            detail: "История буфера, ссылки с полки, сниппеты и заметки будут стёрты. Это нельзя отменить.",
+                            actionTitle: "Удалить"
+                        ) { model.deleteAllLocalData() }
                     }
                     .buttonStyle(CurtySecondaryButtonStyle(isDestructive: true))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,15 +117,7 @@ struct SettingsPane: View {
             }
             .padding(.bottom, 4)
         }
-        .confirmationDialog(
-            "Удалить все локальные данные?",
-            isPresented: $isConfirmingDeletion
-        ) {
-            Button("Удалить", role: .destructive) { model.deleteAllLocalData() }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("История буфера, ссылки с полки, сниппеты и заметки будут стёрты. Это нельзя отменить.")
-        }
+
     }
 
     private var timeZoneRow: some View {
@@ -132,7 +127,7 @@ struct SettingsPane: View {
                     .font(.system(size: 12, weight: .medium))
                 Text("Пригодится, если часы на маке не совпадают с местом, где вы находитесь. По умолчанию Curty берёт пояс системы.")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -174,18 +169,13 @@ struct SettingsPane: View {
                     .font(.system(size: 12, weight: .medium))
                 Text(buildDescription)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 8)
 
-            Text(updateStatus.label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(updateStatus.style.color)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(updateStatus.style.color.opacity(0.12), in: Capsule())
+            Legend(text: updateStatus.label, size: 8, tint: updateStatus.style.color)
         }
 
         if case .failed(let message) = updates.state {
@@ -212,7 +202,7 @@ struct SettingsPane: View {
 
         Text("Обновление откроет Терминал: он заберёт свежую версию с GitHub, пересоберёт её и перезапустит Curty. Заметки, сниппеты, полка и настройки останутся на месте.")
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(CurtyTheme.engravedDim)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -247,14 +237,8 @@ struct SettingsPane: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            CurtyCard {
-                VStack(spacing: 8) { content() }
-            }
+        CurtySection(title: title) {
+            VStack(spacing: 8) { content() }
         }
     }
 
@@ -294,9 +278,9 @@ private enum SettingsToggleBadgeStyle {
 
     var color: Color {
         switch self {
-        case .active: CurtyTheme.accent
-        case .warning: .orange
-        case .inactive, .unavailable: .secondary
+        case .active: CurtyTheme.engraved
+        case .warning: CurtyTheme.accent
+        case .inactive, .unavailable: CurtyTheme.engravedDim
         }
     }
 }
@@ -316,18 +300,13 @@ private struct SettingsToggleRow: View {
                     .font(.system(size: 12, weight: .medium))
                 Text(detail)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CurtyTheme.engravedDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 8)
 
-            Text(stateLabel)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(stateStyle.color)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(stateStyle.color.opacity(0.12), in: Capsule())
+            Legend(text: stateLabel, size: 8, tint: stateStyle.color)
                 .contentTransition(.numericText())
 
             CurtySwitch(isOn: $isOn, isEnabled: isEnabled)

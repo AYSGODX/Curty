@@ -4,12 +4,12 @@ struct ClipboardView: View {
     @ObservedObject var store: ClipboardStore
     @ObservedObject var preferences: Preferences
     @ObservedObject var model: AppModel
-    @State private var isConfirmingClear = false
     @State private var selectedID: UUID?
     @State private var copyConfirmation: RowCopyConfirmation?
 
     var body: some View {
         VStack(spacing: 12) {
+            CurtyStrip {
             HStack(spacing: 8) {
                 // The switch belongs next to the state it controls: sitting by
                 // "Очистить" it read as that button's switch.
@@ -23,14 +23,18 @@ struct ClipboardView: View {
                     systemImage: store.isMonitoring ? "record.circle" : "pause.circle"
                 )
                 .font(.caption.weight(.medium))
-                .foregroundStyle(store.isMonitoring ? CurtyTheme.success : .secondary)
+                .foregroundStyle(store.isMonitoring ? CurtyTheme.success : CurtyTheme.engravedDim)
                 .lineLimit(1)
 
                 Spacer(minLength: 8)
 
                 if !store.entries.isEmpty {
                     Button {
-                        isConfirmingClear = true
+                        model.confirm(
+                            "Очистить историю буфера?",
+                            detail: "История хранится только в памяти, восстановить её будет нельзя.",
+                            actionTitle: "Очистить"
+                        ) { store.clear() }
                     } label: {
                         Label("Очистить", systemImage: "trash")
                             .font(.caption)
@@ -40,6 +44,7 @@ struct ClipboardView: View {
                     .curtyHoverLift()
                     .help("Очистить историю буфера")
                 }
+            }
             }
 
             // Images are opt-in, and with them off nothing about the clipboard
@@ -58,30 +63,23 @@ struct ClipboardView: View {
                         .help("Превью будут храниться в памяти; на полку они попадают только по отдельному нажатию")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CurtyTheme.engravedDim)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+                .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
             if store.entries.isEmpty {
-                CurtyCard {
-                    VStack(spacing: 9) {
-                        Image(systemName: store.isMonitoring ? "doc.on.clipboard" : "hand.raised.fill")
-                            .font(.system(size: 27, weight: .light))
-                            .foregroundStyle(store.isMonitoring ? CurtyTheme.accent : .secondary)
-                        Text(store.isMonitoring ? "Нет сохранённых элементов" : "Доступ к буферу выключен")
-                            .font(.system(size: 13, weight: .medium))
-                        Text(store.isMonitoring ? "Новые элементы появляются только во время наблюдения." : "Включайте историю только когда она нужна.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 108)
-                }
+                DrawnEmptyState(
+                    icon: store.isMonitoring ? "doc.on.clipboard" : "hand.raised.fill",
+                    title: store.isMonitoring ? "История пуста" : "Наблюдение выключено",
+                    detail: store.isMonitoring
+                        ? "Скопируйте что-нибудь — запись появится здесь.\nИстория живёт только в памяти."
+                        : "Включите тумблер слева,\nкогда история понадобится."
+                )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
+                CurtyListPane(footer: "записей \(store.entries.count)") {
+                    LazyVStack(spacing: 5) {
                         ForEach(store.entries) { entry in
                             HStack(spacing: 10) {
                                 Image(systemName: entry.symbol)
@@ -93,7 +91,7 @@ struct ClipboardView: View {
                                         .lineLimit(2)
                                     Text(entry.capturedAt, style: .time)
                                         .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(CurtyTheme.engravedDim)
                                 }
                                 Spacer(minLength: 6)
                                 HStack(spacing: CurtyTheme.rowActionSpacing) {
@@ -159,15 +157,7 @@ struct ClipboardView: View {
         .onChange(of: model.isPanelOpen) { _, isOpen in
             if !isOpen { selectedID = nil }
         }
-        .confirmationDialog(
-            "Очистить историю буфера?",
-            isPresented: $isConfirmingClear
-        ) {
-            Button("Очистить", role: .destructive) { store.clear() }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("История хранится только в памяти, восстановить её будет нельзя.")
-        }
+
     }
 
     private var selectedEntry: ClipboardEntry? {
