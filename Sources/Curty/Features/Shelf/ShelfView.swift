@@ -7,6 +7,7 @@ struct ShelfView: View {
     /// Выделение множественное: ⌘-клик добавляет и убирает, обычный клик
     /// оставляет один элемент.
     @State private var selection: Set<UUID> = []
+    @State private var hoveredID: UUID?
     /// Какую кнопку копирования подсветить галочкой после ⌘C и каким разом:
     /// повторное нажатие по тому же файлу должно подтверждаться заново.
     @State private var copyConfirmation: RowCopyConfirmation?
@@ -133,64 +134,71 @@ struct ShelfView: View {
     private func row(for item: ShelfItem) -> some View {
         let isSelected = selection.contains(item.id)
 
-        HStack(spacing: 10) {
-            Image(systemName: rowIcon(for: item))
-                .foregroundStyle(rowIconTint(for: item))
+        SelectableRow(isSelected: isSelected, isHovered: hoveredID == item.id) {
+            HStack(spacing: 9) {
+                // Выделение, открытие и перетаскивание висят на этой половине
+                // строки, а не на всей: одновременный жест не перебивается
+                // кнопкой под курсором, и нажатие на крестик заодно выделяло
+                // строку, которую сам же и убирало.
+                HStack(spacing: 9) {
+                    Image(systemName: rowIcon(for: item))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(rowIconTint(for: item))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                if !item.isAvailable {
-                    Text("Файл сейчас недоступен")
-                        .font(.caption2)
-                        .foregroundStyle(CurtyTheme.engravedDim)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(CurtyTheme.engraved)
+                            .lineLimit(1)
+                        if !item.isAvailable {
+                            Text("файл сейчас недоступен")
+                                .font(.system(size: 10))
+                                .foregroundStyle(CurtyTheme.engravedDim)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
                 }
-            }
+                .contentShape(Rectangle())
+                // Double click opens, single click only selects — the selection
+                // is what the space bar previews.
+                .onTapGesture(count: 2) { requestOpen(item) }
+                // Selection runs as a simultaneous gesture: as a plain single
+                // tap it would have to wait out the double-click interval
+                // before it could know it was not the first half of one.
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        // Модификатор читаем у системы, а не отдельным жестом:
+                        // два жеста на одно нажатие срабатывают непредсказуемо,
+                        // какой первым — зависит от версии SwiftUI.
+                        if NSEvent.modifierFlags.contains(.command) {
+                            if selection.contains(item.id) {
+                                selection.remove(item.id)
+                            } else {
+                                selection.insert(item.id)
+                            }
+                        } else {
+                            selection = [item.id]
+                        }
+                        isListFocused = true
+                    }
+                )
+                .onDrag {
+                    // Выделение не трогаем: перетаскивание одной строки не
+                    // должно сбрасывать отмеченные рядом.
+                    if !selection.contains(item.id) { selection = [item.id] }
+                    // Перетаскивать нечего, пока файл недоступен: пустой
+                    // провайдер честнее, чем ссылка в никуда.
+                    guard let url = item.url else { return NSItemProvider() }
+                    return NSItemProvider(object: url as NSURL)
+                }
 
-            Spacer(minLength: 8)
-            rowActions(for: item)
+                rowActions(for: item)
+            }
         }
         .opacity(item.isAvailable ? 1 : 0.55)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(rowBackground(for: item), in: RoundedRectangle(cornerRadius: 11))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11)
-                .strokeBorder(isSelected ? CurtyTheme.accent.opacity(0.55) : .clear)
-        )
-        .contentShape(Rectangle())
-        // Double click opens, single click only selects — the selection is
-        // what the space bar previews.
-        .onTapGesture(count: 2) { requestOpen(item) }
-        // Selection runs as a simultaneous gesture: as a plain single tap it
-        // would have to wait out the double-click interval before it could know
-        // it was not the first half of one.
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                // Модификатор читаем у системы, а не отдельным жестом: два
-                // жеста на одно нажатие срабатывают непредсказуемо, какой
-                // первым — зависит от версии SwiftUI.
-                if NSEvent.modifierFlags.contains(.command) {
-                    if selection.contains(item.id) {
-                        selection.remove(item.id)
-                    } else {
-                        selection.insert(item.id)
-                    }
-                } else {
-                    selection = [item.id]
-                }
-                isListFocused = true
-            }
-        )
-        .onDrag {
-            // Выделение не трогаем: перетаскивание одной строки не должно
-            // сбрасывать отмеченные рядом.
-            if !selection.contains(item.id) { selection = [item.id] }
-            // Перетаскивать нечего, пока файл недоступен: пустой провайдер
-            // честнее, чем ссылка в никуда.
-            guard let url = item.url else { return NSItemProvider() }
-            return NSItemProvider(object: url as NSURL)
+        .onHover { hovering in
+            if hovering { hoveredID = item.id } else if hoveredID == item.id { hoveredID = nil }
         }
     }
 
@@ -212,9 +220,11 @@ struct ShelfView: View {
         return item.isPotentiallyExecutable ? "exclamationmark.shield" : "doc"
     }
 
+    /// Исполняемый файл помечен красным: в приборе это цвет предупреждения, а
+    /// не украшение. Всё остальное — обычная приглушённая гравировка: янтарь
+    /// значит «работает сейчас», и раздавать его каждой строке нельзя.
     private func rowIconTint(for item: ShelfItem) -> Color {
-        if !item.isAvailable { return .secondary }
-        return item.isPotentiallyExecutable ? .orange : CurtyTheme.accent
+        item.isPotentiallyExecutable ? CurtyTheme.danger : CurtyTheme.engravedDim
     }
 
     @ViewBuilder
@@ -258,9 +268,6 @@ struct ShelfView: View {
         QuickLookCoordinator.shared.toggle(url, isSecurityScoped: isSecurityScoped)
     }
 
-    private func rowBackground(for item: ShelfItem) -> Color {
-        selection.contains(item.id) ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
-    }
 
     /// Finder comes forward as a result of this, so the panel gets out of the
     /// way instead of hovering over what the user was sent to look at.

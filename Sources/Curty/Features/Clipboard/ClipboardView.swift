@@ -5,6 +5,7 @@ struct ClipboardView: View {
     @ObservedObject var preferences: Preferences
     @ObservedObject var model: AppModel
     @State private var selectedID: UUID?
+    @State private var hoveredID: UUID?
     @State private var copyConfirmation: RowCopyConfirmation?
 
     var body: some View {
@@ -81,16 +82,22 @@ struct ClipboardView: View {
                 CurtyListPane(footer: "записей \(store.entries.count)") {
                     LazyVStack(spacing: 5) {
                         ForEach(store.entries) { entry in
-                            HStack(spacing: 10) {
+                            SelectableRow(
+                                isSelected: selectedID == entry.id,
+                                isHovered: hoveredID == entry.id
+                            ) {
+                            HStack(spacing: 9) {
                                 Image(systemName: entry.symbol)
-                                    .frame(width: 22)
-                                    .foregroundStyle(CurtyTheme.accent)
-                                VStack(alignment: .leading, spacing: 2) {
+                                    .font(.system(size: 13, weight: .medium))
+                                    .frame(width: 20)
+                                    .foregroundStyle(CurtyTheme.engravedDim)
+                                VStack(alignment: .leading, spacing: 1) {
                                     Text(entry.preview)
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(CurtyTheme.engraved)
                                         .lineLimit(2)
                                     Text(entry.capturedAt, style: .time)
-                                        .font(.caption2)
+                                        .font(.system(size: 10).monospacedDigit())
                                         .foregroundStyle(CurtyTheme.engravedDim)
                                 }
                                 Spacer(minLength: 6)
@@ -125,14 +132,16 @@ struct ClipboardView: View {
                                 }
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
-                            .padding(10)
-                            .background(background(for: entry.id), in: RoundedRectangle(cornerRadius: 11))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 11)
-                                    .strokeBorder(selectedID == entry.id ? CurtyTheme.accent.opacity(0.55) : .clear)
-                            )
+                            }
                             .contentShape(Rectangle())
                             .onTapGesture { selectedID = entry.id }
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveredID = entry.id
+                                } else if hoveredID == entry.id {
+                                    hoveredID = nil
+                                }
+                            }
                         }
                     }
                 }
@@ -170,7 +179,4 @@ struct ClipboardView: View {
         copyConfirmation = RowCopyConfirmation(entry.id)
     }
 
-    private func background(for id: UUID) -> Color {
-        selectedID == id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
-    }
 }

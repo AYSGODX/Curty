@@ -5,6 +5,7 @@ struct SnippetsView: View {
     @ObservedObject var model: AppModel
     @State private var draft: SnippetDraft?
     @State private var selectedID: UUID?
+    @State private var hoveredID: UUID?
     @State private var copyConfirmation: RowCopyConfirmation?
     /// Поиск живёт в том же окне, что и кнопка с ⌘C, и сочетание достанется
     /// ей, а не полю. Пока курсор в поиске, копирование сниппета выключено.
@@ -60,12 +61,17 @@ struct SnippetsView: View {
                 CurtyListPane(footer: "сниппетов \(store.filteredItems.count)") {
                     LazyVStack(spacing: 5) {
                         ForEach(store.filteredItems) { snippet in
-                            HStack(spacing: 10) {
-                                VStack(alignment: .leading, spacing: 3) {
+                            SelectableRow(
+                                isSelected: selectedID == snippet.id,
+                                isHovered: hoveredID == snippet.id
+                            ) {
+                            HStack(spacing: 9) {
+                                VStack(alignment: .leading, spacing: 2) {
                                     Text(snippet.title.isEmpty ? "Без названия" : snippet.title)
                                         .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(CurtyTheme.engraved)
                                     Text(snippet.body)
-                                        .font(.caption)
+                                        .font(.system(size: 11))
                                         .foregroundStyle(CurtyTheme.engravedDim)
                                         .lineLimit(2)
                                 }
@@ -98,13 +104,15 @@ struct SnippetsView: View {
                                 }
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
-                            .padding(10)
-                            .background(background(for: snippet.id), in: RoundedRectangle(cornerRadius: 11))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 11)
-                                    .strokeBorder(selectedID == snippet.id ? CurtyTheme.accent.opacity(0.55) : .clear)
-                            )
+                            }
                             .contentShape(Rectangle())
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveredID = snippet.id
+                                } else if hoveredID == snippet.id {
+                                    hoveredID = nil
+                                }
+                            }
                             .onTapGesture {
                                 selectedID = snippet.id
                                 // Клик по строке не уводит фокус из поля поиска
@@ -171,9 +179,6 @@ struct SnippetsView: View {
         copyConfirmation = RowCopyConfirmation(snippet.id)
     }
 
-    private func background(for id: UUID) -> Color {
-        selectedID == id ? CurtyTheme.accent.opacity(0.16) : .primary.opacity(0.045)
-    }
 }
 
 private struct SnippetDraft: Identifiable {
