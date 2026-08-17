@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panelController?.install()
         installMenuBarItem()
         model.start()
+        // Диалог «Добавить» создаётся заранее: в песочнице его создание ходит
+        // во внешнюю службу и стоит сотни миллисекунд — см. SharedOpenDialog.
+        SharedOpenDialog.warmUp()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
