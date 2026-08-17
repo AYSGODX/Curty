@@ -39,6 +39,8 @@ struct SnippetsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .curtyFieldChrome(isFocused: isSearchFocused)
+                    // Кликабельна вся прорезь — правило у curtyFieldPressFocus.
+                    .curtyFieldPressFocus()
                     .focused($isSearchFocused)
                     .focusEffectDisabled()
 
@@ -142,10 +144,9 @@ struct SnippetsView: View {
         }
         // Клик мимо поля снимает с него фокус — иначе рамка остаётся
         // подсвеченной, и непонятно, куда попадёт следующее нажатие клавиш.
-        // Строки и кнопки обрабатывают нажатие сами, сюда доходит только то,
-        // что пришлось на пустое место.
-        .contentShape(Rectangle())
-        .onTapGesture { isSearchFocused = false }
+        // Через роутер: у него конкретные области (поле, строки) побеждают
+        // эту общую, так что сюда достаётся только пустое место и кнопки.
+        .onLeftMouseDown { _ in isSearchFocused = false }
         // Пока редактор на экране, панель не должна уезжать из-под курсора:
         // окно редактора висит отдельно и осталось бы висеть в одиночестве.
         .onChange(of: draft != nil) { _, isPresenting in
@@ -225,6 +226,11 @@ private struct SnippetEditor: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .curtyFieldChrome(isFocused: focus == .title)
+                // Кликабельна вся прорезь. Здесь обычный жест: редактор —
+                // отдельное окно, нажатия панели сюда не приходят, а жесты в
+                // нормальных окнах работают.
+                .contentShape(Rectangle())
+                .onTapGesture { focus = .title }
                 .focused($focus, equals: .title)
                 .focusEffectDisabled()
 
@@ -236,6 +242,8 @@ private struct SnippetEditor: View {
                 .padding(6)
                 .frame(height: 120)
                 .curtyFieldChrome(isFocused: focus == .body)
+                .contentShape(Rectangle())
+                .onTapGesture { focus = .body }
                 .focused($focus, equals: .body)
                 .focusEffectDisabled()
 

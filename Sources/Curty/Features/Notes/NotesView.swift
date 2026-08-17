@@ -5,6 +5,7 @@ struct NotesView: View {
     @ObservedObject var model: AppModel
     @State private var hoveredID: UUID?
     @FocusState private var isEditorFocused: Bool
+    @FocusState private var isTitleFocused: Bool
 
     private var selectedNote: ScratchNote? {
         store.items.first { $0.id == store.selectedID }
@@ -71,8 +72,11 @@ struct NotesView: View {
                                     store.selectedID = note.id
                                 }
                             ) {
-                                Text(note.text.isEmpty ? "пустая заметка" : note.text)
-                                    .font(.system(size: 11))
+                                Text(note.listLabel)
+                                    .font(.system(
+                                        size: 11,
+                                        weight: note.hasTitle ? .semibold : .regular
+                                    ))
                                     .foregroundStyle(CurtyTheme.engraved)
                                     .lineLimit(2)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,8 +99,26 @@ struct NotesView: View {
             if let note = selectedNote {
                 CurtySection(title: "Заметка", fillsHeight: true) {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Spacer()
+                        HStack(spacing: 8) {
+                            // Заголовок не обязателен: пустое поле оставляет
+                            // заметке прежнюю подпись — первые слова текста.
+                            // Читается из стора, а не из note, — по той же
+                            // причине, что и текст ниже.
+                            TextField("Заголовок", text: Binding(
+                                get: { store.items.first { $0.id == note.id }?.title ?? "" },
+                                set: { store.update(note.id, title: $0) }
+                            ))
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .curtyFieldChrome(isFocused: isTitleFocused)
+                            // Кликабельна вся прорезь — правило у
+                            // curtyFieldPressFocus.
+                            .curtyFieldPressFocus()
+                            .focused($isTitleFocused)
+                            .focusEffectDisabled()
+
                             CurtyRowButton(
                                 systemName: "trash",
                                 title: "Удалить заметку",
@@ -121,6 +143,8 @@ struct NotesView: View {
                         .padding(6)
                         .frame(maxHeight: .infinity)
                         .curtyFieldChrome(isFocused: isEditorFocused, cornerRadius: 10)
+                        // Поля прорези вокруг текста тоже ставят фокус.
+                        .curtyFieldPressFocus()
                         .focused($isEditorFocused)
                         .focusEffectDisabled()
 

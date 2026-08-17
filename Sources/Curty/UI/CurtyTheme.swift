@@ -846,6 +846,23 @@ extension View {
             onPressEndedWithoutDrag: onPressEndedWithoutDrag
         ))
     }
+
+    /// Прорезь поля целиком принимает нажатие.
+    ///
+    /// У плоского TextField кликабельна лишь строка текста, а прорезь шире неё
+    /// на поля. Клик по самому тексту это правило не трогает — им занимается
+    /// система. Клик по полям прорези находит текстовый вид над подложкой и
+    /// делает его первым ответчиком — оборотом цикла позже, когда щелчок
+    /// дообработан и уже некому увести фокус.
+    func curtyFieldPressFocus() -> some View {
+        background(LeftMouseDownCatcher(
+            action: { _ in },
+            trailingExclusion: 0,
+            dragSource: nil,
+            onPressEndedWithoutDrag: nil,
+            focusesFieldOutsideText: true
+        ))
+    }
 }
 
 /// Файлы, которые отдаёт строка, и право на них: тащат строку из выделения —
@@ -899,6 +916,11 @@ final class RowPressRouter {
         guard let window = event.window else { return }
         let point = event.locationInWindow
         pressed = nil
+        // Области накладываются: поле лежит на подложке всей вкладки, которая
+        // снимает фокус по пустому месту. Побеждает самая маленькая из
+        // накрывших точку — конкретный контрол, а не общий фон.
+        var best: LeftMouseDownCatcher.CatcherView?
+        var bestArea = CGFloat.greatestFiniteMagnitude
         for entry in entries {
             guard let view = entry.view,
                   view.window === window,
@@ -908,11 +930,23 @@ final class RowPressRouter {
             // заодно выделять строку, которую сам же меняет.
             rect.size.width = max(0, rect.width - view.trailingExclusion)
             guard rect.contains(point) else { continue }
-            view.action(event)
-            if view.dragSource != nil || view.onPressEndedWithoutDrag != nil {
-                pressed = (view, point)
+            let area = rect.width * rect.height
+            if area < bestArea {
+                best = view
+                bestArea = area
             }
-            return
+        }
+        guard let best else { return }
+        best.action(event)
+        if best.focusesFieldOutsideText {
+            // После sendEvent: сам щелчок успевает подвигать первого
+            // ответчика, ставить своего надо после.
+            DispatchQueue.main.async { [weak best] in
+                best?.focusFieldIfPressedPadding(at: point)
+            }
+        }
+        if best.dragSource != nil || best.onPressEndedWithoutDrag != nil {
+            pressed = (best, point)
         }
     }
 
@@ -999,13 +1033,15 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
     let trailingExclusion: CGFloat
     let dragSource: (() -> RowDragPayload?)?
     let onPressEndedWithoutDrag: (() -> Void)?
+    var focusesFieldOutsideText = false
 
     func makeNSView(context: Context) -> CatcherView {
         CatcherView(
             action: action,
             trailingExclusion: trailingExclusion,
             dragSource: dragSource,
-            onPressEndedWithoutDrag: onPressEndedWithoutDrag
+            onPressEndedWithoutDrag: onPressEndedWithoutDrag,
+            focusesFieldOutsideText: focusesFieldOutsideText
         )
     }
 
@@ -1014,6 +1050,7 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         view.trailingExclusion = trailingExclusion
         view.dragSource = dragSource
         view.onPressEndedWithoutDrag = onPressEndedWithoutDrag
+        view.focusesFieldOutsideText = focusesFieldOutsideText
     }
 
     final class CatcherView: NSView, NSDraggingSource {
@@ -1021,6 +1058,7 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         var trailingExclusion: CGFloat
         var dragSource: (() -> RowDragPayload?)?
         var onPressEndedWithoutDrag: (() -> Void)?
+        var focusesFieldOutsideText: Bool
         /// Право на файлы, открытое на время сессии.
         private var access: (() -> Void)?
 
@@ -1028,13 +1066,41 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
             action: @escaping (NSEvent) -> Void,
             trailingExclusion: CGFloat,
             dragSource: (() -> RowDragPayload?)?,
-            onPressEndedWithoutDrag: (() -> Void)?
+            onPressEndedWithoutDrag: (() -> Void)?,
+            focusesFieldOutsideText: Bool = false
         ) {
             self.action = action
             self.trailingExclusion = trailingExclusion
             self.dragSource = dragSource
             self.onPressEndedWithoutDrag = onPressEndedWithoutDrag
+            self.focusesFieldOutsideText = focusesFieldOutsideText
             super.init(frame: .zero)
+        }
+
+        /// Клик в поля прорези — фокус текстовому виду над подложкой. Клик по
+        /// самой текстовой зоне не трогаем: им занимается система, и второй
+        /// желающий устроил бы гонку за фокус.
+        func focusFieldIfPressedPadding(at pointInWindow: NSPoint) {
+            guard let window, let root = window.contentView else { return }
+            let myRect = convert(bounds, to: nil)
+            var best: NSView?
+            var bestArea = CGFloat.greatestFiniteMagnitude
+            func walk(_ view: NSView) {
+                for sub in view.subviews { walk(sub) }
+                guard view is NSTextField || view is NSTextView else { return }
+                let rect = view.convert(view.bounds, to: nil)
+                guard rect.intersects(myRect) else { return }
+                let area = rect.width * rect.height
+                if area < bestArea {
+                    best = view
+                    bestArea = area
+                }
+            }
+            walk(root)
+            guard let best else { return }
+            let textRect = best.convert(best.bounds, to: nil)
+            guard !textRect.contains(pointInWindow) else { return }
+            window.makeFirstResponder(best)
         }
 
         /// Файл отдаётся обещанием: приёмник просит систему, и она кладёт

@@ -2,8 +2,25 @@ import Foundation
 
 struct ScratchNote: Identifiable, Codable, Equatable {
     let id: UUID
+    /// Заголовок не обязателен. Optional, а не пустая строка, чтобы файлы,
+    /// записанные до его появления, читались без миграции.
+    var title: String?
     var text: String
     var modifiedAt: Date
+
+    /// Дан ли заметке настоящий заголовок: одни пробелы заголовком не считаются.
+    var hasTitle: Bool {
+        !(title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Чем заметка подписана в списке: заголовком, если он дан, иначе — как и
+    /// прежде — началом текста; заметка без того и другого названа пустой.
+    var listLabel: String {
+        if hasTitle {
+            return title!.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text.isEmpty ? "пустая заметка" : text
+    }
 }
 
 /// Удалённая запись, которую ещё можно вернуть. Подтверждение на каждое
@@ -57,6 +74,13 @@ final class NoteStore: ObservableObject {
     /// поле оставался, а сохранён не был, и человек узнавал об этом только по
     /// красной строке ошибки. Запас в пятьдесят тысяч даёт время заметить.
     static let counterThreshold = 200_000
+
+    func update(_ id: UUID, title: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].title = title
+        items[index].modifiedAt = Date()
+        scheduleSave()
+    }
 
     func update(_ id: UUID, text: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }

@@ -197,6 +197,34 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(PendingDeletion<String>.window, .seconds(4))
     }
 
+    /// Заголовок у заметки не обязателен. Файлы, записанные до его появления,
+    /// обязаны читаться без миграции, а подпись в списке выбирается по правилу:
+    /// заголовок, если он дан, иначе — начало текста.
+    func testNoteTitleIsOptionalAndDrivesTheListLabel() throws {
+        // Заметка из файла тех времён, когда поля title не существовало.
+        let old = Data("""
+        [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","text":"старый текст","modifiedAt":761500000}]
+        """.utf8)
+        let decoded = try JSONDecoder().decode([ScratchNote].self, from: old)
+        XCTAssertNil(decoded.first?.title)
+        XCTAssertEqual(decoded.first?.listLabel, "старый текст")
+
+        var note = ScratchNote(id: UUID(), text: "", modifiedAt: Date())
+        XCTAssertEqual(note.listLabel, "пустая заметка")
+
+        note.text = "первые слова текста"
+        XCTAssertEqual(note.listLabel, "первые слова текста")
+
+        // Одни пробелы заголовком не считаются: подпись остаётся прежней.
+        note.title = "   "
+        XCTAssertFalse(note.hasTitle)
+        XCTAssertEqual(note.listLabel, "первые слова текста")
+
+        note.title = " Список покупок "
+        XCTAssertTrue(note.hasTitle)
+        XCTAssertEqual(note.listLabel, "Список покупок")
+    }
+
     @MainActor
     func testDeletedNoteComesBackToItsOwnPlace() {
         let store = NoteStore()
