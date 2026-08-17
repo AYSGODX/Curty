@@ -218,6 +218,7 @@ final class AppModel: ObservableObject {
             .store(in: &cancellables)
 
         clipboard.onImageSaved = { [weak shelf] url in shelf?.addOwnedFile(url) }
+        clipboard.onFileSaved = { [weak shelf] url in shelf?.addUserSelectedFiles([url]) ?? false }
         calendar.onPermissionPromptChange = { [weak self] isPresenting in
             self?.isPresentingDialog = isPresenting
         }

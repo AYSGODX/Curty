@@ -31,6 +31,32 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertEqual(board.string(forType: .string), "из Curty")
     }
 
+    /// Ответ полки решает, убирать ли запись из истории буфера. Поэтому
+    /// «уже лежит» обязано считаться принятым: иначе повторный перенос того же
+    /// файла оставлял бы в истории запись о том, что на полке и так есть.
+    @MainActor
+    func testShelfReportsWhetherTheFileEndedUpThere() throws {
+        let store = ShelfStore()
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("curty-\(UUID().uuidString).txt")
+        try "перенос".write(to: file, atomically: true, encoding: .utf8)
+        defer {
+            store.items.filter { $0.url == file }.forEach { store.remove($0) }
+            try? FileManager.default.removeItem(at: file)
+        }
+
+        XCTAssertTrue(store.addUserSelectedFiles([file]), "файл должен оказаться на полке")
+        XCTAssertEqual(store.items.filter { $0.url == file }.count, 1)
+
+        XCTAssertTrue(store.addUserSelectedFiles([file]), "уже лежащий файл — тоже «на полке»")
+        XCTAssertEqual(store.items.filter { $0.url == file }.count, 1, "дубля быть не должно")
+
+        let missing = file.deletingLastPathComponent()
+            .appendingPathComponent("curty-нет-такого-\(UUID().uuidString).txt")
+        XCTAssertFalse(store.addUserSelectedFiles([missing]), "несуществующий файл принять нельзя")
+        XCTAssertNotNil(store.lastError, "отказ должен быть объяснён, а не проглочен")
+    }
+
     func testTextTakenToTheTranslatorLeavesTheHistory() {
         let entries: [ClipboardEntry] = [
             .init(payload: .text("Xin chào"), capturedAt: Date()),

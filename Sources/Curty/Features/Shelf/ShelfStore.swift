@@ -64,7 +64,11 @@ final class ShelfStore: ObservableObject {
         if refreshedBookmarks { persist() }
     }
 
-    func addUserSelectedFiles(_ urls: [URL]) {
+    /// Отвечает, лежат ли теперь на полке все переданные файлы. Уже лежавший
+    /// считается принятым: спрашивают не «добавил ли ты», а «есть ли он там» —
+    /// от этого зависит, можно ли убирать запись из истории буфера.
+    @discardableResult
+    func addUserSelectedFiles(_ urls: [URL]) -> Bool {
         for url in urls where url.isFileURL && !items.contains(where: { $0.url == url }) {
             do {
                 let bookmark = try url.bookmarkData(
@@ -93,6 +97,7 @@ final class ShelfStore: ObservableObject {
             }
         }
         persist()
+        return urls.allSatisfy { url in items.contains { $0.url == url } }
     }
 
     func addOwnedFile(_ url: URL) {

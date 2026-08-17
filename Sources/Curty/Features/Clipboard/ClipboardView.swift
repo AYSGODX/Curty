@@ -111,17 +111,27 @@ struct ClipboardView: View {
                                     Spacer(minLength: 6)
                                 }
                                 HStack(spacing: CurtyTheme.rowActionSpacing) {
-                                    if case .image = entry.payload {
-                                        // Галочки подтверждения тут нет
-                                        // намеренно: строка сама исчезает из
-                                        // истории, и это ответ понятнее любого
-                                        // значка.
+                                    // Галочки подтверждения у переноса нет
+                                    // намеренно: строка сама исчезает из
+                                    // истории, и это ответ понятнее любого
+                                    // значка.
+                                    switch entry.payload {
+                                    case .image:
                                         CurtyRowButton(
                                             systemName: "tray.and.arrow.down",
                                             title: "Перенести изображение на полку",
                                             size: CurtyTheme.rowActionSize,
                                             glyphSize: 13
                                         ) { store.saveImage(entry) }
+                                    case .file:
+                                        CurtyRowButton(
+                                            systemName: "tray.and.arrow.down",
+                                            title: "Перенести файл на полку",
+                                            size: CurtyTheme.rowActionSize,
+                                            glyphSize: 13
+                                        ) { store.saveFile(entry) }
+                                    case .text:
+                                        EmptyView()
                                     }
                                     CurtyRowButton(
                                         systemName: "doc.on.doc",

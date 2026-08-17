@@ -144,6 +144,8 @@ final class ClipboardStore: ObservableObject {
 
     var capturesImages = false
     var onImageSaved: ((URL) -> Void)?
+    /// Отвечает, взяла ли полка файл: от этого зависит, убирать ли запись.
+    var onFileSaved: ((URL) -> Bool)?
 
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount = NSPasteboard.general.changeCount
@@ -190,6 +192,16 @@ final class ClipboardStore: ObservableObject {
         }
         lastChangeCount = pasteboard.changeCount
 
+    }
+
+    /// Файл уезжает на полку и из истории уходит — тем же правилом, что и
+    /// снимок. Разница в том, что чужой файл требует закладки песочницы, и
+    /// выдать её система может отказать: тогда запись остаётся, а полка сама
+    /// объясняет отказ.
+    func saveFile(_ entry: ClipboardEntry) {
+        guard case .file(let url) = entry.payload else { return }
+        guard onFileSaved?(url) == true else { return }
+        remove(entry)
     }
 
     /// Снимок уезжает на полку и из истории уходит: там он лежит файлом,
