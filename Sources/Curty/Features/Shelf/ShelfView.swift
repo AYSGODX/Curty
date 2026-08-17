@@ -134,12 +134,15 @@ struct ShelfView: View {
     private func row(for item: ShelfItem) -> some View {
         let isSelected = selection.contains(item.id)
 
-        SelectableRow(isSelected: isSelected, isHovered: hoveredID == item.id) {
+        SelectableRow(
+            isSelected: isSelected,
+            isHovered: hoveredID == item.id,
+            onPress: { event in press(item, event: event) },
+            pressExclusionTrailing: CurtyTheme.rowActionClusterWidth
+        ) {
             HStack(spacing: 9) {
-                // Выделение, открытие и перетаскивание висят на этой половине
-                // строки, а не на всей: одновременный жест не перебивается
-                // кнопкой под курсором, и нажатие на крестик заодно выделяло
-                // строку, которую сам же и убирало.
+                // Перетаскивание висит на половине строки с именем; нажатие
+                // принимает сама строка — целиком, кроме блока кнопок справа.
                 HStack(spacing: 9) {
                     Image(systemName: rowIcon(for: item))
                         .font(.system(size: 13, weight: .medium))
@@ -159,30 +162,6 @@ struct ShelfView: View {
 
                     Spacer(minLength: 8)
                 }
-                .contentShape(Rectangle())
-                // Double click opens, single click only selects — the selection
-                // is what the space bar previews.
-                .onTapGesture(count: 2) { requestOpen(item) }
-                // Selection runs as a simultaneous gesture: as a plain single
-                // tap it would have to wait out the double-click interval
-                // before it could know it was not the first half of one.
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        // Модификатор читаем у системы, а не отдельным жестом:
-                        // два жеста на одно нажатие срабатывают непредсказуемо,
-                        // какой первым — зависит от версии SwiftUI.
-                        if NSEvent.modifierFlags.contains(.command) {
-                            if selection.contains(item.id) {
-                                selection.remove(item.id)
-                            } else {
-                                selection.insert(item.id)
-                            }
-                        } else {
-                            selection = [item.id]
-                        }
-                        isListFocused = true
-                    }
-                )
                 .onDrag {
                     // Выделение не трогаем: перетаскивание одной строки не
                     // должно сбрасывать отмеченные рядом.
@@ -199,6 +178,34 @@ struct ShelfView: View {
         .opacity(item.isAvailable ? 1 : 0.55)
         .onHover { hovering in
             if hovering { hoveredID = item.id } else if hoveredID == item.id { hoveredID = nil }
+        }
+    }
+
+    /// Нажатие в теле строки: выделение, ⌘-выделение и открытие двойным.
+    private func press(_ item: ShelfItem, event: NSEvent) {
+        // Плита подтверждения перекрывает список только на глаз: нажатия
+        // раздаются по прямоугольникам, и без проверки клик по плите заодно
+        // выделял бы строку под ней.
+        guard model.pendingConfirmation == nil else { return }
+        // Счётчик двойного щелчка у macOS растёт по времени, а не по месту:
+        // быстрый клик по соседней строке приходит со счётом 2, хотя никакой
+        // это не двойной. Замер: нажатие в 43 пунктах от предыдущего через
+        // 384 мс — счёт=2. Открытие поэтому требует, чтобы строка уже была
+        // выделена первым нажатием той же пары — у настоящего двойного это
+        // так, а переклик между файлами остаётся выделением.
+        if event.clickCount >= 2, selection.contains(item.id),
+           !event.modifierFlags.contains(.command) {
+            requestOpen(item)
+        } else if event.modifierFlags.contains(.command) {
+            if selection.contains(item.id) {
+                selection.remove(item.id)
+            } else {
+                selection.insert(item.id)
+            }
+            isListFocused = true
+        } else {
+            selection = [item.id]
+            isListFocused = true
         }
     }
 

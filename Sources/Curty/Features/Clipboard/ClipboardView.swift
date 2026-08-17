@@ -84,23 +84,32 @@ struct ClipboardView: View {
                         ForEach(store.entries) { entry in
                             SelectableRow(
                                 isSelected: selectedID == entry.id,
-                                isHovered: hoveredID == entry.id
+                                isHovered: hoveredID == entry.id,
+                                onPress: { _ in
+                                    // Сквозь плиту подтверждения не выделять:
+                                    // нажатия раздаются по прямоугольникам.
+                                    guard model.pendingConfirmation == nil else { return }
+                                    selectedID = entry.id
+                                },
+                                pressExclusionTrailing: CurtyTheme.rowActionClusterWidth
                             ) {
                             HStack(spacing: 9) {
-                                Image(systemName: entry.symbol)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .frame(width: 20)
-                                    .foregroundStyle(CurtyTheme.engravedDim)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(entry.preview)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(CurtyTheme.engraved)
-                                        .lineLimit(2)
-                                    Text(entry.capturedAt, style: .time)
-                                        .font(.system(size: 10).monospacedDigit())
+                                HStack(spacing: 9) {
+                                    Image(systemName: entry.symbol)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .frame(width: 20)
                                         .foregroundStyle(CurtyTheme.engravedDim)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(entry.preview)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(CurtyTheme.engraved)
+                                            .lineLimit(2)
+                                        Text(entry.capturedAt, style: .time)
+                                            .font(.system(size: 10).monospacedDigit())
+                                            .foregroundStyle(CurtyTheme.engravedDim)
+                                    }
+                                    Spacer(minLength: 6)
                                 }
-                                Spacer(minLength: 6)
                                 HStack(spacing: CurtyTheme.rowActionSpacing) {
                                     if case .image = entry.payload {
                                         CurtyRowButton(
@@ -133,8 +142,6 @@ struct ClipboardView: View {
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectedID = entry.id }
                             .onHover { hovering in
                                 if hovering {
                                     hoveredID = entry.id

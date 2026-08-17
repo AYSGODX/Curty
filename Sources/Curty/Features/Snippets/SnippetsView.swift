@@ -63,19 +63,32 @@ struct SnippetsView: View {
                         ForEach(store.filteredItems) { snippet in
                             SelectableRow(
                                 isSelected: selectedID == snippet.id,
-                                isHovered: hoveredID == snippet.id
+                                isHovered: hoveredID == snippet.id,
+                                onPress: { _ in
+                                    // Сквозь плиту подтверждения не выделять:
+                                    // нажатия раздаются по прямоугольникам.
+                                    guard model.pendingConfirmation == nil else { return }
+                                    selectedID = snippet.id
+                                    // Клик по строке сам по себе фокус из поля
+                                    // поиска не уводит, а без этого ⌘C
+                                    // останется выключен.
+                                    isSearchFocused = false
+                                },
+                                pressExclusionTrailing: CurtyTheme.rowActionClusterWidth
                             ) {
                             HStack(spacing: 9) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(snippet.title.isEmpty ? "Без названия" : snippet.title)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(CurtyTheme.engraved)
-                                    Text(snippet.body)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(CurtyTheme.engravedDim)
-                                        .lineLimit(2)
+                                HStack(spacing: 9) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(snippet.title.isEmpty ? "Без названия" : snippet.title)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(CurtyTheme.engraved)
+                                        Text(snippet.body)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(CurtyTheme.engravedDim)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer(minLength: 8)
                                 }
-                                Spacer(minLength: 8)
                                 HStack(spacing: CurtyTheme.rowActionSpacing) {
                                     CurtyRowButton(
                                         systemName: "pencil",
@@ -105,19 +118,12 @@ struct SnippetsView: View {
                                 .frame(width: CurtyTheme.rowActionClusterWidth, alignment: .trailing)
                             }
                             }
-                            .contentShape(Rectangle())
                             .onHover { hovering in
                                 if hovering {
                                     hoveredID = snippet.id
                                 } else if hoveredID == snippet.id {
                                     hoveredID = nil
                                 }
-                            }
-                            .onTapGesture {
-                                selectedID = snippet.id
-                                // Клик по строке не уводит фокус из поля поиска
-                                // сам по себе, а без этого ⌘C останется выключен.
-                                isSearchFocused = false
                             }
                         }
                     }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotesView: View {
     @ObservedObject var store: NoteStore
+    @ObservedObject var model: AppModel
     @State private var hoveredID: UUID?
     @FocusState private var isEditorFocused: Bool
 
@@ -60,21 +61,22 @@ struct NotesView: View {
                 CurtyListPane(footer: "заметок \(store.items.count)") {
                     VStack(spacing: 5) {
                         ForEach(store.items) { note in
-                            Button {
-                                store.selectedID = note.id
-                            } label: {
-                                SelectableRow(
-                                    isSelected: store.selectedID == note.id,
-                                    isHovered: hoveredID == note.id
-                                ) {
-                                    Text(note.text.isEmpty ? "пустая заметка" : note.text)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(CurtyTheme.engraved)
-                                        .lineLimit(2)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                            SelectableRow(
+                                isSelected: store.selectedID == note.id,
+                                isHovered: hoveredID == note.id,
+                                onPress: { _ in
+                                    // Сквозь плиту подтверждения не выделять:
+                                    // нажатия раздаются по прямоугольникам.
+                                    guard model.pendingConfirmation == nil else { return }
+                                    store.selectedID = note.id
                                 }
+                            ) {
+                                Text(note.text.isEmpty ? "пустая заметка" : note.text)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(CurtyTheme.engraved)
+                                    .lineLimit(2)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .buttonStyle(.plain)
                             .onHover { hovering in
                                 withAnimation(.easeOut(duration: 0.12)) {
                                     if hovering {

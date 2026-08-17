@@ -358,17 +358,32 @@ struct CurtySection<Content: View>: View {
 /// Строка списка. У выбранной горит лампа на кромке и светлеет поле, под
 /// курсором поле светлеет слабее. Ни рамок, ни пунктиров: в приборе состояние
 /// показывает свет.
+///
+/// Нажатие строка принимает сама, всей своей площадью: когда область нажатия
+/// висела на внутреннем стеке с текстом, она покрывала полоску в шестнадцать
+/// пунктов посреди сорокачетырёхпунктовой строки — клик точно по имени
+/// срабатывал, клик на пару пунктов выше или ниже проваливался в поля. При
+/// быстром перекликивании рука мажет по вертикали, и это выглядело как
+/// «выделение работает через раз».
 struct SelectableRow<Content: View>: View {
     let isSelected: Bool
     let isHovered: Bool
+    /// Вызывается по нажатию в теле строки — см. onLeftMouseDown.
+    var onPress: ((NSEvent) -> Void)?
+    /// Сколько правого края строки нажатию не принадлежит: там кнопки, и клик
+    /// по ним не должен заодно выделять строку. Отступ до кромки строка
+    /// добавляет сама — она знает собственные поля.
+    var pressExclusionTrailing: CGFloat = 0
     @ViewBuilder let content: Content
+
+    private static var horizontalPadding: CGFloat { 8 }
 
     var body: some View {
         HStack(spacing: 8) {
             Lamp(isLit: isSelected, size: 5)
             content
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Self.horizontalPadding)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
@@ -379,6 +394,25 @@ struct SelectableRow<Content: View>: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .strokeBorder(.white.opacity(isSelected ? 0.16 : 0.05), lineWidth: 1)
         )
+        .modifier(RowPressModifier(
+            onPress: onPress,
+            trailingExclusion: pressExclusionTrailing > 0
+                ? pressExclusionTrailing + Self.horizontalPadding
+                : 0
+        ))
+    }
+}
+
+private struct RowPressModifier: ViewModifier {
+    let onPress: ((NSEvent) -> Void)?
+    let trailingExclusion: CGFloat
+
+    func body(content: Content) -> some View {
+        if let onPress {
+            content.onLeftMouseDown(trailingExclusion: trailingExclusion, perform: onPress)
+        } else {
+            content
+        }
     }
 }
 
@@ -762,5 +796,112 @@ private struct CurtyHoverLift: ViewModifier {
 extension View {
     func curtyHoverLift(scale: CGFloat = 1.04) -> some View {
         modifier(CurtyHoverLift(scale: scale))
+    }
+}
+
+// MARK: - Нажатие в строках списков
+
+extension View {
+    /// Действие по нажатию кнопки мыши — в обход жестов SwiftUI.
+    ///
+    /// Жестам в строках списков верить нельзя, это проверено замером по
+    /// журналу панели: нажатие доходило до окна всегда, а распознаватели —
+    /// что одиночного щелчка, что перетаскивания с нулевым порогом —
+    /// срабатывали меньше чем в половине случаев. Кнопки SwiftUI при этом
+    /// работали без осечек.
+    ///
+    /// Обычный путь AppKit тоже закрыт: свой NSView под строкой до mouseDown
+    /// не доходит — обёртка, в которую SwiftUI заворачивает чужие виды,
+    /// гасит его ответ на hitTest. Поэтому вид здесь только сообщает свой
+    /// прямоугольник, а нажатия раздаёт само окно панели: оно видит каждое
+    /// событие в sendEvent и передаёт его вью, в чей прямоугольник пришёлся
+    /// щелчок. См. RowPressRouter.
+    ///
+    /// Выделение по нажатию — а не по завершённому щелчку — это заодно и
+    /// поведение Finder.
+    func onLeftMouseDown(
+        trailingExclusion: CGFloat = 0,
+        perform action: @escaping (NSEvent) -> Void
+    ) -> some View {
+        background(LeftMouseDownCatcher(action: action, trailingExclusion: trailingExclusion))
+    }
+}
+
+/// Раздаёт нажатия зарегистрированным областям строк по координатам окна.
+/// Окно зовёт route из sendEvent на каждый левый mouseDown.
+@MainActor
+final class RowPressRouter {
+    static let shared = RowPressRouter()
+
+    private struct Entry {
+        weak var view: LeftMouseDownCatcher.CatcherView?
+    }
+
+    private var entries: [Entry] = []
+
+    fileprivate func register(_ view: LeftMouseDownCatcher.CatcherView) {
+        entries.removeAll { $0.view == nil || $0.view === view }
+        entries.append(Entry(view: view))
+    }
+
+    fileprivate func unregister(_ view: LeftMouseDownCatcher.CatcherView) {
+        entries.removeAll { $0.view == nil || $0.view === view }
+    }
+
+    /// Отдаёт событие области, в которую пришлось нажатие. Событие не
+    /// поглощается — окно продолжит обычную доставку, чтобы кнопки и
+    /// перетаскивание жили как жили; область только успевает выделить строку.
+    func route(_ event: NSEvent) {
+        guard let window = event.window else { return }
+        let point = event.locationInWindow
+        for entry in entries {
+            guard let view = entry.view,
+                  view.window === window,
+                  !view.isHiddenOrHasHiddenAncestor else { continue }
+            var rect = view.convert(view.bounds, to: nil)
+            // Правый край строки принадлежит кнопкам: клик по ним не должен
+            // заодно выделять строку, которую сам же меняет.
+            rect.size.width = max(0, rect.width - view.trailingExclusion)
+            guard rect.contains(point) else { continue }
+            view.action(event)
+            return
+        }
+    }
+}
+
+private struct LeftMouseDownCatcher: NSViewRepresentable {
+    let action: (NSEvent) -> Void
+    let trailingExclusion: CGFloat
+
+    func makeNSView(context: Context) -> CatcherView {
+        CatcherView(action: action, trailingExclusion: trailingExclusion)
+    }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.action = action
+        view.trailingExclusion = trailingExclusion
+    }
+
+    final class CatcherView: NSView {
+        var action: (NSEvent) -> Void
+        var trailingExclusion: CGFloat
+
+        init(action: @escaping (NSEvent) -> Void, trailingExclusion: CGFloat) {
+            self.action = action
+            self.trailingExclusion = trailingExclusion
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window == nil {
+                RowPressRouter.shared.unregister(self)
+            } else {
+                RowPressRouter.shared.register(self)
+            }
+        }
     }
 }

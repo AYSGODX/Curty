@@ -115,6 +115,24 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// Щелчок по неключевому окну доходит до вида под курсором, только если
+    /// тот принимает первый щелчок. Наш корневой вид принимает, но списки
+    /// SwiftUI строит из собственных подвидов, а они — нет: нажатие по строке
+    /// свежераскрытой шторки уходило на попытку поднять окно и пропадало.
+    /// Выдаём ключ прямо при нажатии, до разбора события, — и первый щелчок
+    /// становится обычным. Ключ панель и так получала от того же щелчка,
+    /// просто на один потерянный клик позже; возврат ключа при закрытии уже
+    /// налажен в relinquishFocus.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            if !isKeyWindow { makeKey() }
+            // Нажатия по строкам раздаём сами: путь через иерархию видов для
+            // них закрыт — подробности у onLeftMouseDown.
+            RowPressRouter.shared.route(event)
+        }
+        super.sendEvent(event)
+    }
+
     // Quick Look looks up the responder chain of the key window for whoever
     // will feed it. As the window itself, this panel is that responder.
     override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
