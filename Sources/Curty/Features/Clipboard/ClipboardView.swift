@@ -112,12 +112,15 @@ struct ClipboardView: View {
                                 }
                                 HStack(spacing: CurtyTheme.rowActionSpacing) {
                                     if case .image = entry.payload {
+                                        // Галочки подтверждения тут нет
+                                        // намеренно: строка сама исчезает из
+                                        // истории, и это ответ понятнее любого
+                                        // значка.
                                         CurtyRowButton(
                                             systemName: "tray.and.arrow.down",
-                                            title: "Сохранить изображение на полку",
+                                            title: "Перенести изображение на полку",
                                             size: CurtyTheme.rowActionSize,
-                                            glyphSize: 13,
-                                            confirmsWith: "checkmark"
+                                            glyphSize: 13
                                         ) { store.saveImage(entry) }
                                     }
                                     CurtyRowButton(

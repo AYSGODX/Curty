@@ -192,11 +192,20 @@ final class ClipboardStore: ObservableObject {
 
     }
 
+    /// Снимок уезжает на полку и из истории уходит: там он лежит файлом,
+    /// который переживёт перезапуск, а история живёт в памяти и до вечера не
+    /// доживает. Оставлять запись значило бы держать два изображения в двух
+    /// списках, из которых настоящее только одно. Так же уходит из истории
+    /// текст, отданный переводчику.
+    ///
+    /// Не сохранилось — запись остаётся на месте: повторить попытку должно
+    /// быть чем.
     func saveImage(_ entry: ClipboardEntry) {
         guard case .image(let data) = entry.payload else { return }
         do {
             let url = try ClipboardVault.save(data)
             onImageSaved?(url)
+            remove(entry)
             lastError = nil
         } catch {
             lastError = error.localizedDescription
