@@ -262,15 +262,22 @@ final class ShelfStore: ObservableObject {
     /// Здесь на доску кладётся сам файл, своим настоящим путём. Право на него
     /// полка держит по закладке, поэтому доступ открывается на время сессии и
     /// закрывается, когда перетаскивание закончилось.
-    func beginDrag(_ item: ShelfItem) -> RowDragPayload? {
-        guard let url = item.url else { return nil }
-        guard case .securityScopedBookmark = item.location else {
-            return RowDragPayload(url: url) {}
+    func beginDrag(_ items: [ShelfItem]) -> RowDragPayload? {
+        var urls: [URL] = []
+        var opened: [URL] = []
+        for item in items {
+            guard let url = item.url else { continue }
+            if case .securityScopedBookmark = item.location, url.startAccessingSecurityScopedResource() {
+                opened.append(url)
+            }
+            urls.append(url)
         }
-        guard url.startAccessingSecurityScopedResource() else {
-            return RowDragPayload(url: url) {}
+        // Недоступные записи молча пропущены: перетаскивание везёт то, что
+        // есть. Не осталось ничего — нет и перетаскивания.
+        guard !urls.isEmpty else { return nil }
+        return RowDragPayload(urls: urls) {
+            opened.forEach { $0.stopAccessingSecurityScopedResource() }
         }
-        return RowDragPayload(url: url) { url.stopAccessingSecurityScopedResource() }
     }
 
     private func withAccess<Result>(to item: ShelfItem, perform: (URL) -> Result) -> Result? {

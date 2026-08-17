@@ -52,16 +52,16 @@ final class SecurityBoundaryTests: XCTestCase {
             name: file.lastPathComponent,
             addedAt: Date()
         )
-        let payload = try XCTUnwrap(store.beginDrag(item))
+        let payload = try XCTUnwrap(store.beginDrag([item]))
         defer { payload.release() }
-        XCTAssertEqual(payload.url, file, "отдаётся сам файл, а не копия")
+        XCTAssertEqual(payload.urls, [file], "отдаётся сам файл, а не копия")
 
         // То же самое, но глазами приёмника: кладём на доску ровно так, как
         // это делает строка, и читаем обратно.
         let board = NSPasteboard(name: .init("dev.curty.tests.\(UUID().uuidString)"))
         defer { board.releaseGlobally() }
         board.clearContents()
-        board.writeObjects([payload.url as NSURL])
+        board.writeObjects(payload.urls.map { $0 as NSURL })
 
         let read = board.readObjects(forClasses: [NSURL.self],
                                      options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
@@ -70,6 +70,40 @@ final class SecurityBoundaryTests: XCTestCase {
             read.first?.path.contains("/Containers/dev.curty.app/") ?? true,
             "путь не должен вести в наш контейнер: \(read.first?.path ?? "—")"
         )
+    }
+
+    /// Тащат строку из выделения — едут все выделенные: в порядке полки,
+    /// недоступные пропускаются, а без единого доступного файла перетаскивание
+    /// не начинается вовсе.
+    @MainActor
+    func testDraggingSelectionCarriesEveryFile() throws {
+        let store = ShelfStore()
+        let directory = FileManager.default.temporaryDirectory
+        let first = directory.appendingPathComponent("curty-a-\(UUID().uuidString).txt")
+        let second = directory.appendingPathComponent("curty-b-\(UUID().uuidString).txt")
+        try "первый".write(to: first, atomically: true, encoding: .utf8)
+        try "второй".write(to: second, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+
+        func item(_ url: URL?) -> ShelfItem {
+            ShelfItem(
+                id: UUID(),
+                location: .ownedFile(url?.path ?? "/нет-такого"),
+                url: url,
+                name: url?.lastPathComponent ?? "недоступный",
+                addedAt: Date()
+            )
+        }
+
+        let payload = try XCTUnwrap(store.beginDrag([item(first), item(nil), item(second)]))
+        defer { payload.release() }
+        XCTAssertEqual(payload.urls, [first, second])
+
+        XCTAssertNil(store.beginDrag([item(nil)]), "нечего везти — нет и перетаскивания")
+        XCTAssertNil(store.beginDrag([]), "пустое выделение — нет перетаскивания")
     }
 
     /// Ответ полки решает, убирать ли запись из истории буфера. Поэтому

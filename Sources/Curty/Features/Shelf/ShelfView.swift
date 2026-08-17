@@ -12,6 +12,9 @@ struct ShelfView: View {
     /// повторное нажатие по тому же файлу должно подтверждаться заново.
     @State private var copyConfirmation: RowCopyConfirmation?
     @FocusState private var isListFocused: Bool
+    /// Строка, до которой выделение схлопнется на отпускании, если нажатие
+    /// не переросло в перетаскивание.
+    @State private var pendingCollapseID: UUID?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -142,7 +145,23 @@ struct ShelfView: View {
             isHovered: hoveredID == item.id,
             onPress: { event in press(item, event: event) },
             pressExclusionTrailing: CurtyTheme.rowActionClusterWidth,
-            dragSource: { store.beginDrag(item) }
+            dragSource: {
+                // Тащат строку из выделения — едет всё выделение, в порядке
+                // полки. Невыделенную — едет она одна: нажатие уже перевело
+                // выделение на неё.
+                let dragged = selection.contains(item.id)
+                    ? store.items.filter { selection.contains($0.id) }
+                    : [item]
+                return store.beginDrag(dragged)
+            },
+            onPressEndedWithoutDrag: {
+                // Щелчок по строке из выделения схлопывает выделение до неё,
+                // как в Finder, — но это известно только на отпускании: на
+                // нажатии он неотличим от начала перетаскивания всей пачки.
+                guard pendingCollapseID == item.id else { return }
+                pendingCollapseID = nil
+                selection = [item.id]
+            }
         ) {
             HStack(spacing: 9) {
                 HStack(spacing: 9) {
@@ -186,6 +205,7 @@ struct ShelfView: View {
         // 384 мс — счёт=2. Открытие поэтому требует, чтобы строка уже была
         // выделена первым нажатием той же пары — у настоящего двойного это
         // так, а переклик между файлами остаётся выделением.
+        pendingCollapseID = nil
         if event.clickCount >= 2, selection.contains(item.id),
            !event.modifierFlags.contains(.command) {
             requestOpen(item)
@@ -195,6 +215,12 @@ struct ShelfView: View {
             } else {
                 selection.insert(item.id)
             }
+            isListFocused = true
+        } else if selection.contains(item.id) {
+            // Строка уже в выделении — рушить его нельзя: возможно, это
+            // начало перетаскивания всей пачки. Схлопывание откладывается до
+            // отпускания без перетаскивания.
+            pendingCollapseID = item.id
             isListFocused = true
         } else {
             selection = [item.id]

@@ -375,8 +375,10 @@ struct SelectableRow<Content: View>: View {
     /// по ним не должен заодно выделять строку. Отступ до кромки строка
     /// добавляет сама — она знает собственные поля.
     var pressExclusionTrailing: CGFloat = 0
-    /// Файл, который эта строка отдаёт перетаскиванием, если отдаёт.
+    /// Файлы, которые эта строка отдаёт перетаскиванием, если отдаёт.
     var dragSource: (() -> RowDragPayload?)?
+    /// Нажатие в строке кончилось щелчком, а не перетаскиванием.
+    var onPressEndedWithoutDrag: (() -> Void)?
     @ViewBuilder let content: Content
 
     private static var horizontalPadding: CGFloat { 8 }
@@ -402,7 +404,8 @@ struct SelectableRow<Content: View>: View {
             trailingExclusion: pressExclusionTrailing > 0
                 ? pressExclusionTrailing + Self.horizontalPadding
                 : 0,
-            dragSource: dragSource
+            dragSource: dragSource,
+            onPressEndedWithoutDrag: onPressEndedWithoutDrag
         ))
     }
 }
@@ -411,12 +414,14 @@ private struct RowPressModifier: ViewModifier {
     let onPress: ((NSEvent) -> Void)?
     let trailingExclusion: CGFloat
     let dragSource: (() -> RowDragPayload?)?
+    let onPressEndedWithoutDrag: (() -> Void)?
 
     func body(content: Content) -> some View {
         if let onPress {
             content.onLeftMouseDown(
                 trailingExclusion: trailingExclusion,
                 dragSource: dragSource,
+                onPressEndedWithoutDrag: onPressEndedWithoutDrag,
                 perform: onPress
             )
         } else {
@@ -831,23 +836,26 @@ extension View {
     func onLeftMouseDown(
         trailingExclusion: CGFloat = 0,
         dragSource: (() -> RowDragPayload?)? = nil,
+        onPressEndedWithoutDrag: (() -> Void)? = nil,
         perform action: @escaping (NSEvent) -> Void
     ) -> some View {
         background(LeftMouseDownCatcher(
             action: action,
             trailingExclusion: trailingExclusion,
-            dragSource: dragSource
+            dragSource: dragSource,
+            onPressEndedWithoutDrag: onPressEndedWithoutDrag
         ))
     }
 }
 
-/// Файл, который отдаёт строка, и право на него.
+/// Файлы, которые отдаёт строка, и право на них: тащат строку из выделения —
+/// едет всё выделение.
 ///
 /// Право приходится держать открытым всё перетаскивание: полка владеет чужими
 /// файлами по закладке, а система выдаёт доступ приёмнику, только пока он
 /// открыт у источника. Закрывает его `release`, когда сессия закончилась.
 struct RowDragPayload {
-    let url: URL
+    let urls: [URL]
     let release: () -> Void
 
     /// Сколько право живёт после того, как перетаскивание закончилось.
@@ -901,7 +909,9 @@ final class RowPressRouter {
             rect.size.width = max(0, rect.width - view.trailingExclusion)
             guard rect.contains(point) else { continue }
             view.action(event)
-            if view.dragSource != nil { pressed = (view, point) }
+            if view.dragSource != nil || view.onPressEndedWithoutDrag != nil {
+                pressed = (view, point)
+            }
             return
         }
     }
@@ -922,8 +932,12 @@ final class RowPressRouter {
         pressed.view.beginFileDrag(with: event)
     }
 
-    /// Нажатие закончилось, ничего не сдвинув: перетаскивания не будет.
-    func routeRelease() { pressed = nil }
+    /// Нажатие закончилось, ничего не сдвинув: это был щелчок. Строке есть
+    /// что доделать — например, схлопнуть выделение, отложенное на нажатии.
+    func routeRelease() {
+        pressed?.view.onPressEndedWithoutDrag?()
+        pressed = nil
+    }
 }
 
 /// Обещание файла и ссылка на него — на одной доске.
@@ -984,32 +998,42 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
     let action: (NSEvent) -> Void
     let trailingExclusion: CGFloat
     let dragSource: (() -> RowDragPayload?)?
+    let onPressEndedWithoutDrag: (() -> Void)?
 
     func makeNSView(context: Context) -> CatcherView {
-        CatcherView(action: action, trailingExclusion: trailingExclusion, dragSource: dragSource)
+        CatcherView(
+            action: action,
+            trailingExclusion: trailingExclusion,
+            dragSource: dragSource,
+            onPressEndedWithoutDrag: onPressEndedWithoutDrag
+        )
     }
 
     func updateNSView(_ view: CatcherView, context: Context) {
         view.action = action
         view.trailingExclusion = trailingExclusion
         view.dragSource = dragSource
+        view.onPressEndedWithoutDrag = onPressEndedWithoutDrag
     }
 
     final class CatcherView: NSView, NSDraggingSource {
         var action: (NSEvent) -> Void
         var trailingExclusion: CGFloat
         var dragSource: (() -> RowDragPayload?)?
-        /// Право на файл, открытое на время сессии.
+        var onPressEndedWithoutDrag: (() -> Void)?
+        /// Право на файлы, открытое на время сессии.
         private var access: (() -> Void)?
 
         init(
             action: @escaping (NSEvent) -> Void,
             trailingExclusion: CGFloat,
-            dragSource: (() -> RowDragPayload?)?
+            dragSource: (() -> RowDragPayload?)?,
+            onPressEndedWithoutDrag: (() -> Void)?
         ) {
             self.action = action
             self.trailingExclusion = trailingExclusion
             self.dragSource = dragSource
+            self.onPressEndedWithoutDrag = onPressEndedWithoutDrag
             super.init(frame: .zero)
         }
 
@@ -1024,24 +1048,31 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         /// верное — и писал «файл недоступен». Обещание снимает вопрос: копию
         /// делает сам приёмник у себя.
         func beginFileDrag(with event: NSEvent) {
-            guard let payload = dragSource?() else { return }
+            guard let payload = dragSource?(), !payload.urls.isEmpty else { return }
             access?()
             access = payload.release
 
-            let type = UTType(filenameExtension: payload.url.pathExtension) ?? .data
-            let promise = FilePromiseWithURL(fileType: type.identifier, delegate: self)
-            promise.userInfo = payload.url
-            promise.fileURL = payload.url
-            let item = NSDraggingItem(pasteboardWriter: promise)
-            let icon = NSWorkspace.shared.icon(forFile: payload.url.path)
             let point = convert(event.locationInWindow, from: nil)
             let size = NSSize(width: 48, height: 48)
-            item.setDraggingFrame(
-                NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
-                       width: size.width, height: size.height),
-                contents: icon
-            )
-            beginDraggingSession(with: [item], event: event, source: self)
+            // Значки ложатся стопкой с лёгким сдвигом: видно, что едет пачка.
+            let items = payload.urls.enumerated().map { index, url in
+                let type = UTType(filenameExtension: url.pathExtension) ?? .data
+                let promise = FilePromiseWithURL(fileType: type.identifier, delegate: self)
+                promise.userInfo = url
+                promise.fileURL = url
+                let item = NSDraggingItem(pasteboardWriter: promise)
+                let shift = CGFloat(min(index, 4)) * 4
+                item.setDraggingFrame(
+                    NSRect(
+                        x: point.x - size.width / 2 + shift,
+                        y: point.y - size.height / 2 - shift,
+                        width: size.width, height: size.height
+                    ),
+                    contents: NSWorkspace.shared.icon(forFile: url.path)
+                )
+                return item
+            }
+            beginDraggingSession(with: items, event: event, source: self)
         }
 
         func draggingSession(
