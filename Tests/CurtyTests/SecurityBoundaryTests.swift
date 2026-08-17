@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import XCTest
 @testable import Curty
 
@@ -29,6 +30,46 @@ final class SecurityBoundaryTests: XCTestCase {
         InternalPasteboard.write(to: board) { $0.setString("из Curty", forType: .string) }
         XCTAssertTrue(InternalPasteboard.containsMarker(board))
         XCTAssertEqual(board.string(forType: .string), "из Curty")
+    }
+
+    /// Перетаскивание обязано отдавать сам файл, а не его копию. Через
+    /// `.onDrag` SwiftUI это оказалось недостижимо: он копировал файл в кэш
+    /// нашего контейнера и отдавал приёмнику путь туда — CapCut отвечал «нет
+    /// доступа к некоторым материалам». Поэтому файл кладётся на доску
+    /// средствами AppKit, своим настоящим путём.
+    @MainActor
+    func testDraggedFileKeepsItsRealPath() throws {
+        let store = ShelfStore()
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("curty-\(UUID().uuidString).txt")
+        try "перетаскивание".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let item = ShelfItem(
+            id: UUID(),
+            location: .ownedFile(file.path),
+            url: file,
+            name: file.lastPathComponent,
+            addedAt: Date()
+        )
+        let payload = try XCTUnwrap(store.beginDrag(item))
+        defer { payload.release() }
+        XCTAssertEqual(payload.url, file, "отдаётся сам файл, а не копия")
+
+        // То же самое, но глазами приёмника: кладём на доску ровно так, как
+        // это делает строка, и читаем обратно.
+        let board = NSPasteboard(name: .init("dev.curty.tests.\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.clearContents()
+        board.writeObjects([payload.url as NSURL])
+
+        let read = board.readObjects(forClasses: [NSURL.self],
+                                     options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        XCTAssertEqual(read.first?.standardizedFileURL, file.standardizedFileURL)
+        XCTAssertFalse(
+            read.first?.path.contains("/Containers/dev.curty.app/") ?? true,
+            "путь не должен вести в наш контейнер: \(read.first?.path ?? "—")"
+        )
     }
 
     /// Ответ полки решает, убирать ли запись из истории буфера. Поэтому

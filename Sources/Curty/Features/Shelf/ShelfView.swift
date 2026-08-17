@@ -141,11 +141,10 @@ struct ShelfView: View {
             isSelected: isSelected,
             isHovered: hoveredID == item.id,
             onPress: { event in press(item, event: event) },
-            pressExclusionTrailing: CurtyTheme.rowActionClusterWidth
+            pressExclusionTrailing: CurtyTheme.rowActionClusterWidth,
+            dragSource: { store.beginDrag(item) }
         ) {
             HStack(spacing: 9) {
-                // Перетаскивание висит на половине строки с именем; нажатие
-                // принимает сама строка — целиком, кроме блока кнопок справа.
                 HStack(spacing: 9) {
                     Image(systemName: rowIcon(for: item))
                         .font(.system(size: 13, weight: .medium))
@@ -164,15 +163,6 @@ struct ShelfView: View {
                     }
 
                     Spacer(minLength: 8)
-                }
-                .onDrag {
-                    // Выделение не трогаем: перетаскивание одной строки не
-                    // должно сбрасывать отмеченные рядом.
-                    if !selection.contains(item.id) { selection = [item.id] }
-                    // Перетаскивать нечего, пока файл недоступен: пустой
-                    // провайдер честнее, чем ссылка в никуда.
-                    guard let url = item.url else { return NSItemProvider() }
-                    return NSItemProvider(object: url as NSURL)
                 }
 
                 rowActions(for: item)

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum CurtyTheme {
     static let panelCornerRadius: CGFloat = 20
@@ -374,6 +375,8 @@ struct SelectableRow<Content: View>: View {
     /// по ним не должен заодно выделять строку. Отступ до кромки строка
     /// добавляет сама — она знает собственные поля.
     var pressExclusionTrailing: CGFloat = 0
+    /// Файл, который эта строка отдаёт перетаскиванием, если отдаёт.
+    var dragSource: (() -> RowDragPayload?)?
     @ViewBuilder let content: Content
 
     private static var horizontalPadding: CGFloat { 8 }
@@ -398,7 +401,8 @@ struct SelectableRow<Content: View>: View {
             onPress: onPress,
             trailingExclusion: pressExclusionTrailing > 0
                 ? pressExclusionTrailing + Self.horizontalPadding
-                : 0
+                : 0,
+            dragSource: dragSource
         ))
     }
 }
@@ -406,10 +410,15 @@ struct SelectableRow<Content: View>: View {
 private struct RowPressModifier: ViewModifier {
     let onPress: ((NSEvent) -> Void)?
     let trailingExclusion: CGFloat
+    let dragSource: (() -> RowDragPayload?)?
 
     func body(content: Content) -> some View {
         if let onPress {
-            content.onLeftMouseDown(trailingExclusion: trailingExclusion, perform: onPress)
+            content.onLeftMouseDown(
+                trailingExclusion: trailingExclusion,
+                dragSource: dragSource,
+                perform: onPress
+            )
         } else {
             content
         }
@@ -821,10 +830,30 @@ extension View {
     /// поведение Finder.
     func onLeftMouseDown(
         trailingExclusion: CGFloat = 0,
+        dragSource: (() -> RowDragPayload?)? = nil,
         perform action: @escaping (NSEvent) -> Void
     ) -> some View {
-        background(LeftMouseDownCatcher(action: action, trailingExclusion: trailingExclusion))
+        background(LeftMouseDownCatcher(
+            action: action,
+            trailingExclusion: trailingExclusion,
+            dragSource: dragSource
+        ))
     }
+}
+
+/// Файл, который отдаёт строка, и право на него.
+///
+/// Право приходится держать открытым всё перетаскивание: полка владеет чужими
+/// файлами по закладке, а система выдаёт доступ приёмнику, только пока он
+/// открыт у источника. Закрывает его `release`, когда сессия закончилась.
+struct RowDragPayload {
+    let url: URL
+    let release: () -> Void
+
+    /// Сколько право живёт после того, как перетаскивание закончилось.
+    /// Достаточно, чтобы приёмник успел прочитать файл и, если ему нужно,
+    /// сделать свою копию; и мало, чтобы чужой файл не оставался открытым.
+    static let accessWindow: TimeInterval = 60
 }
 
 /// Раздаёт нажатия зарегистрированным областям строк по координатам окна.
@@ -848,12 +877,20 @@ final class RowPressRouter {
         entries.removeAll { $0.view == nil || $0.view === view }
     }
 
+    /// Строка, с которой началось нажатие, и точка начала: если курсор
+    /// сдвинется достаточно далеко, это перетаскивание.
+    private var pressed: (view: LeftMouseDownCatcher.CatcherView, origin: NSPoint)?
+
+    /// Ниже этого смещения нажатие остаётся нажатием, а не перетаскиванием.
+    private static let dragThreshold: CGFloat = 4
+
     /// Отдаёт событие области, в которую пришлось нажатие. Событие не
-    /// поглощается — окно продолжит обычную доставку, чтобы кнопки и
-    /// перетаскивание жили как жили; область только успевает выделить строку.
+    /// поглощается — окно продолжит обычную доставку, чтобы кнопки жили как
+    /// жили; область только успевает выделить строку.
     func route(_ event: NSEvent) {
         guard let window = event.window else { return }
         let point = event.locationInWindow
+        pressed = nil
         for entry in entries {
             guard let view = entry.view,
                   view.window === window,
@@ -864,32 +901,182 @@ final class RowPressRouter {
             rect.size.width = max(0, rect.width - view.trailingExclusion)
             guard rect.contains(point) else { continue }
             view.action(event)
+            if view.dragSource != nil { pressed = (view, point) }
             return
         }
+    }
+
+    /// Перетаскивание начинает сам AppKit, а не SwiftUI. У `.onDrag` иначе:
+    /// он копирует файл в кэш нашего контейнера и отдаёт приёмнику путь туда —
+    /// путь в чужую песочницу, до которого другому приложению не дотянуться.
+    /// Замер приёмником в песочнице показал это дословно, и обойти поведение
+    /// средствами SwiftUI не вышло: ссылка на доске возвращала копию обратно.
+    func routeDrag(_ event: NSEvent) {
+        guard let pressed else { return }
+        let moved = hypot(
+            event.locationInWindow.x - pressed.origin.x,
+            event.locationInWindow.y - pressed.origin.y
+        )
+        guard moved > Self.dragThreshold else { return }
+        self.pressed = nil
+        pressed.view.beginFileDrag(with: event)
+    }
+
+    /// Нажатие закончилось, ничего не сдвинув: перетаскивания не будет.
+    func routeRelease() { pressed = nil }
+}
+
+/// Обещание файла и ссылка на него — на одной доске.
+///
+/// Порознь не работает ни то, ни другое. Ссылку CapCut принимает, но прочитать
+/// не может: он вне песочницы, а файл лежит в «Загрузках», доступ к которым
+/// решает системная приватность. Одно обещание он не понимает вовсе — молча не
+/// берёт ничего. Finder понимает оба. Поэтому кладём оба и оставляем выбор
+/// приёмнику.
+private final class FilePromiseWithURL: NSFilePromiseProvider {
+    var fileURL: URL?
+
+    override func writableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
+        super.writableTypes(for: pasteboard) + [.fileURL]
+    }
+
+    override func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
+        guard type == .fileURL else { return super.pasteboardPropertyList(forType: type) }
+        return fileURL?.absoluteString
+    }
+}
+
+extension LeftMouseDownCatcher.CatcherView: NSFilePromiseProviderDelegate {
+    func filePromiseProvider(
+        _ filePromiseProvider: NSFilePromiseProvider,
+        fileNameForType fileType: String
+    ) -> String {
+        (filePromiseProvider.userInfo as? URL)?.lastPathComponent ?? "файл"
+    }
+
+    func filePromiseProvider(
+        _ filePromiseProvider: NSFilePromiseProvider,
+        writePromiseTo destination: URL,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        guard let source = filePromiseProvider.userInfo as? URL else {
+            completionHandler(CocoaError(.fileNoSuchFile))
+            return
+        }
+        do {
+            // Право на чужой файл открыто на время сессии, но копирование
+            // может начаться и позже — открываем ещё раз, это дёшево.
+            let opened = source.startAccessingSecurityScopedResource()
+            defer { if opened { source.stopAccessingSecurityScopedResource() } }
+            try FileManager.default.copyItem(at: source, to: destination)
+            completionHandler(nil)
+        } catch {
+            completionHandler(error)
+        }
+    }
+
+    func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
+        Self.promiseQueue
     }
 }
 
 private struct LeftMouseDownCatcher: NSViewRepresentable {
     let action: (NSEvent) -> Void
     let trailingExclusion: CGFloat
+    let dragSource: (() -> RowDragPayload?)?
 
     func makeNSView(context: Context) -> CatcherView {
-        CatcherView(action: action, trailingExclusion: trailingExclusion)
+        CatcherView(action: action, trailingExclusion: trailingExclusion, dragSource: dragSource)
     }
 
     func updateNSView(_ view: CatcherView, context: Context) {
         view.action = action
         view.trailingExclusion = trailingExclusion
+        view.dragSource = dragSource
     }
 
-    final class CatcherView: NSView {
+    final class CatcherView: NSView, NSDraggingSource {
         var action: (NSEvent) -> Void
         var trailingExclusion: CGFloat
+        var dragSource: (() -> RowDragPayload?)?
+        /// Право на файл, открытое на время сессии.
+        private var access: (() -> Void)?
 
-        init(action: @escaping (NSEvent) -> Void, trailingExclusion: CGFloat) {
+        init(
+            action: @escaping (NSEvent) -> Void,
+            trailingExclusion: CGFloat,
+            dragSource: (() -> RowDragPayload?)?
+        ) {
             self.action = action
             self.trailingExclusion = trailingExclusion
+            self.dragSource = dragSource
             super.init(frame: .zero)
+        }
+
+        /// Файл отдаётся обещанием: приёмник просит систему, и она кладёт
+        /// копию туда, где у него доступ заведомо есть.
+        ///
+        /// Отдавать настоящий путь оказалось мало. Право, которое система
+        /// выдаёт приёмнику при броске, действует для приложений в песочнице —
+        /// пробный приёмник читал файл без запинки. А CapCut работает вне
+        /// песочницы: там доступ к «Загрузкам» решает системная приватность, и
+        /// выдать её из приложения нельзя. Файл он принимал, имя показывал
+        /// верное — и писал «файл недоступен». Обещание снимает вопрос: копию
+        /// делает сам приёмник у себя.
+        func beginFileDrag(with event: NSEvent) {
+            guard let payload = dragSource?() else { return }
+            access?()
+            access = payload.release
+
+            let type = UTType(filenameExtension: payload.url.pathExtension) ?? .data
+            let promise = FilePromiseWithURL(fileType: type.identifier, delegate: self)
+            promise.userInfo = payload.url
+            promise.fileURL = payload.url
+            let item = NSDraggingItem(pasteboardWriter: promise)
+            let icon = NSWorkspace.shared.icon(forFile: payload.url.path)
+            let point = convert(event.locationInWindow, from: nil)
+            let size = NSSize(width: 48, height: 48)
+            item.setDraggingFrame(
+                NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                       width: size.width, height: size.height),
+                contents: icon
+            )
+            beginDraggingSession(with: [item], event: event, source: self)
+        }
+
+        func draggingSession(
+            _ session: NSDraggingSession,
+            sourceOperationMaskFor context: NSDraggingContext
+        ) -> NSDragOperation {
+            .copy
+        }
+
+        // MARK: Обещание файла
+
+        /// Копирование идёт не на главной очереди: файл может быть большим, а
+        /// панель в это время обязана оставаться живой.
+        private static let promiseQueue: OperationQueue = {
+            let queue = OperationQueue()
+            queue.name = "dev.curty.file-promise"
+            queue.qualityOfService = .userInitiated
+            return queue
+        }()
+
+        func draggingSession(
+            _ session: NSDraggingSession,
+            endedAt screenPoint: NSPoint,
+            operation: NSDragOperation
+        ) {
+            // Право снимается не сразу. Приёмник читает файл не в момент
+            // броска, а когда дойдут руки: CapCut строит превью уже после — и
+            // на закрытом праве показывал «файл недоступен», хотя сам файл
+            // принял и имя показывал верное. Наш пробный приёмник читает
+            // мгновенно и потому не замечал разницы.
+            let release = access
+            access = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + RowDragPayload.accessWindow) {
+                release?()
+            }
         }
 
         @available(*, unavailable)

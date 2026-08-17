@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 struct ShelfItem: Identifiable, Equatable {
     enum Location: Codable, Equatable {
@@ -243,6 +244,33 @@ final class ShelfStore: ObservableObject {
         } catch {
             lastError = "Не удалось сохранить список полки: \(error.localizedDescription)"
         }
+    }
+
+    /// Файл и право на него для перетаскивания.
+    ///
+    /// Перетаскивание идёт средствами AppKit, а не через `.onDrag` SwiftUI.
+    /// У того обнаружилось поведение, которое ломало приём в чужих
+    /// приложениях: он копировал файл в кэш нашего контейнера и отдавал
+    /// приёмнику путь туда. Замер приёмником в песочнице показал это дословно
+    /// — `…/Containers/dev.curty.app/…/Caches/com.apple.SwiftUI.Drag-*/имя.mp4`.
+    /// Путь в чужой контейнер требует отдельного разрешения от каждого, кто
+    /// его открывает, и живёт недолго: CapCut отвечал «нет доступа к
+    /// некоторым материалам», а приложения с полным доступом к диску читали —
+    /// отсюда и «иногда работает». Отдать вместо копии ссылку на оригинал
+    /// средствами SwiftUI не вышло: с ней копия возвращалась.
+    ///
+    /// Здесь на доску кладётся сам файл, своим настоящим путём. Право на него
+    /// полка держит по закладке, поэтому доступ открывается на время сессии и
+    /// закрывается, когда перетаскивание закончилось.
+    func beginDrag(_ item: ShelfItem) -> RowDragPayload? {
+        guard let url = item.url else { return nil }
+        guard case .securityScopedBookmark = item.location else {
+            return RowDragPayload(url: url) {}
+        }
+        guard url.startAccessingSecurityScopedResource() else {
+            return RowDragPayload(url: url) {}
+        }
+        return RowDragPayload(url: url) { url.stopAccessingSecurityScopedResource() }
     }
 
     private func withAccess<Result>(to item: ShelfItem, perform: (URL) -> Result) -> Result? {

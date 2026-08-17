@@ -124,11 +124,19 @@ final class FloatingPanel: NSPanel {
     /// просто на один потерянный клик позже; возврат ключа при закрытии уже
     /// налажен в relinquishFocus.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown {
+        switch event.type {
+        case .leftMouseDown:
             if !isKeyWindow { makeKey() }
             // Нажатия по строкам раздаём сами: путь через иерархию видов для
             // них закрыт — подробности у onLeftMouseDown.
             RowPressRouter.shared.route(event)
+        case .leftMouseDragged:
+            // Отсюда же начинается перетаскивание файла с полки.
+            RowPressRouter.shared.routeDrag(event)
+        case .leftMouseUp:
+            RowPressRouter.shared.routeRelease()
+        default:
+            break
         }
         super.sendEvent(event)
     }
