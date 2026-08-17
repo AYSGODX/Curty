@@ -24,11 +24,14 @@ struct ShelfView: View {
                     .buttonStyle(CurtyProminentButtonStyle())
                     .curtyHoverLift()
 
-                Text(selection.count > 1
-                     ? "Выбрано: \(selection.count)"
-                     : "Элементов: \(store.items.count)")
-                    .font(.caption)
-                    .foregroundStyle(CurtyTheme.engravedDim)
+                // Сколько всего на полке, написано в подвале списка, и
+                // повторять это здесь незачем. Место занимает только то, чего
+                // в подвале нет: сколько строк отмечено разом.
+                if selection.count > 1 {
+                    Text("Выбрано: \(selection.count)")
+                        .font(.caption)
+                        .foregroundStyle(CurtyTheme.engravedDim)
+                }
 
                 Spacer(minLength: 8)
 
