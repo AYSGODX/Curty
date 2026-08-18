@@ -8,10 +8,10 @@ Curty — утилита для строки меню macOS, которая жи
 
 | | |
 |---|---|
-| **Медиа**<br><img src="docs/screenshots/media.png" width="430" alt="Вкладка «Медиа»"> | **Полка**<br><img src="docs/screenshots/shelf.png" width="430" alt="Вкладка «Полка»"> |
-| **Буфер**<br><img src="docs/screenshots/clipboard.png" width="430" alt="Вкладка «Буфер»"> | **Сниппеты**<br><img src="docs/screenshots/snippets.png" width="430" alt="Вкладка «Сниппеты»"> |
-| **Календарь**<br><img src="docs/screenshots/calendar.png" width="430" alt="Вкладка «Календарь»"> | **Перевод**<br><img src="docs/screenshots/translate.png" width="430" alt="Вкладка «Перевод»"> |
-| **Заметки**<br><img src="docs/screenshots/notes.png" width="430" alt="Вкладка «Заметки»"> | |
+| **Медиа**<br><sub>Что играет в Music или Spotify: обложка, пауза и перемотка, шкала трека, громкость — не открывая плеер.</sub><br><img src="docs/screenshots/media.jpg" width="430" alt="Вкладка «Медиа»"> | **Полка**<br><sub>Файлы под рукой: бросьте на вырез или добавьте кнопкой, дальше тащите в любое приложение — хоть всей пачкой.</sub><br><img src="docs/screenshots/shelf.jpg" width="430" alt="Вкладка «Полка»"> |
+| **Буфер**<br><sub>История буфера обмена: текст, файлы, картинки. Живёт только в памяти; нужное переносится на полку одним нажатием.</sub><br><img src="docs/screenshots/clipboard.jpg" width="430" alt="Вкладка «Буфер»"> | **Сниппеты**<br><sub>Тексты, которые надоело набирать: реквизиты, шаблоны, куски кода. Поиск и копирование по ⌘C.</sub><br><img src="docs/screenshots/snippets.jpg" width="430" alt="Вкладка «Сниппеты»"> |
+| **Календарь**<br><sub>Встречи на сутки или неделю со всех календарей Mac; ссылка на созвон открывается прямо отсюда.</sub><br><img src="docs/screenshots/calendar.jpg" width="430" alt="Вкладка «Календарь»"> | **Перевод**<br><sub>Перевод системным движком Apple — локально, без интернета; результат копируется одной кнопкой.</sub><br><img src="docs/screenshots/translate.jpg" width="430" alt="Вкладка «Перевод»"> |
+| **Заметки**<br><sub>Быстрые заметки с необязательным заголовком. Лежат на этом Mac и никуда не уходят.</sub><br><img src="docs/screenshots/notes.jpg" width="430" alt="Вкладка «Заметки»"> | **Настройки**<br><sub>Живут во вкладке, а не в отдельном окне: интеграции, состав и порядок левой панели, автозапуск и обновление.</sub><br><img src="docs/screenshots/settings.jpg" width="430" alt="Вкладка «Настройки»"> |
 
 ## Что внутри
 
