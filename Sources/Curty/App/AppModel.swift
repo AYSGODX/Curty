@@ -30,6 +30,23 @@ enum ToolOrderPolicy {
     }
 }
 
+/// Какие разделы рельса спрятаны и куда уходит выбор, когда прячут активный.
+enum RailVisibilityPolicy {
+    /// Настройки спрятать нельзя: это дверь обратно к самому переключателю.
+    /// Незнакомые значения из хранилища молча отбрасываются.
+    static func resolve(stored: [String]) -> Set<AppModel.Tool> {
+        Set(stored.compactMap(AppModel.Tool.init(rawValue:)).filter { $0 != .settings })
+    }
+
+    /// Выбранным может оставаться только то, что видно (настройки видны
+    /// всегда). Спрятали активный раздел — выбор уходит на первый видимый,
+    /// а спрятали всё — на настройки.
+    static func selection(current: AppModel.Tool, visible: [AppModel.Tool]) -> AppModel.Tool {
+        if current == .settings || visible.contains(current) { return current }
+        return visible.first ?? .settings
+    }
+}
+
 /// Вопрос, заданный перед разрушающим действием.
 struct PendingConfirmation: Identifiable {
     let id = UUID()
@@ -127,7 +144,7 @@ final class AppModel: ObservableObject {
     /// не забыть про каждое.
     var keepsPanelOpen: Bool {
         isPinned || isPresentingDialog || isPresentingEditor || isPresentingMenu
-            || pendingConfirmation != nil
+            || pendingConfirmation != nil || isEditingRailSections
     }
 
     /// Wired by the panel controller, which owns the window itself.
@@ -138,6 +155,13 @@ final class AppModel: ObservableObject {
     /// the panel hanging over the result would only be in the way.
     func requestPanelClose() { onCloseRequest?() }
     @Published private(set) var orderedTools: [Tool] = Tool.primary
+    @Published private(set) var hiddenTools: Set<Tool> = []
+    /// Плита «Изменить разделы» поверх панели.
+    @Published var isEditingRailSections = false
+
+    /// Рельс в порядке пользователя и без спрятанного. Настройки живут вне
+    /// этого списка — они пришиты к низу рельса.
+    var visibleTools: [Tool] { orderedTools.filter { !hiddenTools.contains($0) } }
 
     let preferences: Preferences
     let clipboard: ClipboardStore
@@ -186,6 +210,21 @@ final class AppModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] stored in
                 self?.orderedTools = ToolOrderPolicy.resolve(stored: stored, available: Tool.primary)
+            }
+            .store(in: &cancellables)
+
+        preferences.$hiddenTools
+            .removeDuplicates()
+            .sink { [weak self] stored in
+                guard let self else { return }
+                hiddenTools = RailVisibilityPolicy.resolve(stored: stored)
+                // Спрятанный раздел не может оставаться открытым: панель
+                // показывала бы то, чего в рельсе больше нет.
+                let corrected = RailVisibilityPolicy.selection(
+                    current: selectedTool,
+                    visible: visibleTools
+                )
+                if corrected != selectedTool { select(corrected) }
             }
             .store(in: &cancellables)
 
@@ -250,8 +289,28 @@ final class AppModel: ObservableObject {
         preferences.toolOrder = moved.map(\.rawValue)
     }
 
-    func resetToolOrder() {
+    /// Перестановка по месту на экране: спрятанные разделы в рельсе не
+    /// участвуют, поэтому цель — видимый сосед, а двигаем в полном списке.
+    func moveTool(_ tool: Tool, toVisibleIndex index: Int) {
+        let visible = visibleTools
+        guard let currentIndex = visible.firstIndex(of: tool) else { return }
+        let target = min(max(0, index), visible.count - 1)
+        guard target != currentIndex else { return }
+        guard let fullIndex = orderedTools.firstIndex(of: visible[target]) else { return }
+        moveTool(tool, toIndex: fullIndex)
+    }
+
+    func setTool(_ tool: Tool, hidden: Bool) {
+        guard tool != .settings else { return }
+        var stored = Set(preferences.hiddenTools)
+        if hidden { stored.insert(tool.rawValue) } else { stored.remove(tool.rawValue) }
+        preferences.hiddenTools = stored.sorted()
+    }
+
+    /// Сброс левой панели целиком: и порядок, и видимость.
+    func resetRailSettings() {
         preferences.toolOrder = []
+        preferences.hiddenTools = []
     }
 
     func deleteAllLocalData() {

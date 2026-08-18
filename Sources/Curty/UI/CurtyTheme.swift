@@ -23,6 +23,25 @@ enum CurtyTheme {
     /// drag distance into how many places the icon has travelled.
     static var railButtonPitch: CGFloat { railButtonHeight + railButtonSpacing }
 
+    /// Интервал между кнопками рельса при данном числе видимых разделов.
+    ///
+    /// Выключенные разделы освобождают место, и колонка не сжимается и не
+    /// растягивает панель — она дышит: интервал растёт так, чтобы занять ту же
+    /// высоту, что у полного рельса, но не дальше потолка — две иконки по
+    /// разным углам читались бы не колонкой, а двумя потеряшками.
+    static func railSpacing(forVisible count: Int) -> CGFloat {
+        guard count > 1 else { return railButtonSpacing }
+        let fullHeight = CGFloat(7) * railButtonHeight + 6 * railButtonSpacing
+        let stretched = (fullHeight - CGFloat(count) * railButtonHeight) / CGFloat(count - 1)
+        return min(max(railButtonSpacing, stretched), 16)
+    }
+
+    /// Шаг рельса при данном числе видимых разделов — для пересчёта
+    /// перетаскивания в количество пройденных мест.
+    static func railPitch(forVisible count: Int) -> CGFloat {
+        railButtonHeight + railSpacing(forVisible: count)
+    }
+
     /// Below this the pointer never left the icon, so the press is a click.
     static let railDragThreshold: CGFloat = 4
 
@@ -837,13 +856,17 @@ extension View {
         trailingExclusion: CGFloat = 0,
         dragSource: (() -> RowDragPayload?)? = nil,
         onPressEndedWithoutDrag: (() -> Void)? = nil,
+        onDragChanged: ((CGFloat) -> Void)? = nil,
+        onDragEnded: (() -> Void)? = nil,
         perform action: @escaping (NSEvent) -> Void
     ) -> some View {
         background(LeftMouseDownCatcher(
             action: action,
             trailingExclusion: trailingExclusion,
             dragSource: dragSource,
-            onPressEndedWithoutDrag: onPressEndedWithoutDrag
+            onPressEndedWithoutDrag: onPressEndedWithoutDrag,
+            onDragChanged: onDragChanged,
+            onDragEnded: onDragEnded
         ))
     }
 
@@ -945,7 +968,8 @@ final class RowPressRouter {
                 best?.focusFieldIfPressedPadding(at: point)
             }
         }
-        if best.dragSource != nil || best.onPressEndedWithoutDrag != nil {
+        if best.dragSource != nil || best.onPressEndedWithoutDrag != nil
+            || best.onDragChanged != nil {
             pressed = (best, point)
         }
     }
@@ -957,6 +981,17 @@ final class RowPressRouter {
     /// средствами SwiftUI не вышло: ссылка на доске возвращала копию обратно.
     func routeDrag(_ event: NSEvent) {
         guard let pressed else { return }
+
+        // Непрерывное перетаскивание — например, строк в плите разделов.
+        // Жестам SwiftUI такое доверить нельзя: в этой панели они отдают
+        // события с пропусками, и строка догоняла курсор рывками. Роутер видит
+        // каждое движение. Координаты окна растут вверх, перевод для вида —
+        // вниз, поэтому знак перевёрнут.
+        if let onDragChanged = pressed.view.onDragChanged {
+            onDragChanged(pressed.origin.y - event.locationInWindow.y)
+            return
+        }
+
         let moved = hypot(
             event.locationInWindow.x - pressed.origin.x,
             event.locationInWindow.y - pressed.origin.y
@@ -969,6 +1004,7 @@ final class RowPressRouter {
     /// Нажатие закончилось, ничего не сдвинув: это был щелчок. Строке есть
     /// что доделать — например, схлопнуть выделение, отложенное на нажатии.
     func routeRelease() {
+        pressed?.view.onDragEnded?()
         pressed?.view.onPressEndedWithoutDrag?()
         pressed = nil
     }
@@ -1033,16 +1069,21 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
     let trailingExclusion: CGFloat
     let dragSource: (() -> RowDragPayload?)?
     let onPressEndedWithoutDrag: (() -> Void)?
+    var onDragChanged: ((CGFloat) -> Void)?
+    var onDragEnded: (() -> Void)?
     var focusesFieldOutsideText = false
 
     func makeNSView(context: Context) -> CatcherView {
-        CatcherView(
+        let view = CatcherView(
             action: action,
             trailingExclusion: trailingExclusion,
             dragSource: dragSource,
             onPressEndedWithoutDrag: onPressEndedWithoutDrag,
             focusesFieldOutsideText: focusesFieldOutsideText
         )
+        view.onDragChanged = onDragChanged
+        view.onDragEnded = onDragEnded
+        return view
     }
 
     func updateNSView(_ view: CatcherView, context: Context) {
@@ -1050,6 +1091,8 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         view.trailingExclusion = trailingExclusion
         view.dragSource = dragSource
         view.onPressEndedWithoutDrag = onPressEndedWithoutDrag
+        view.onDragChanged = onDragChanged
+        view.onDragEnded = onDragEnded
         view.focusesFieldOutsideText = focusesFieldOutsideText
     }
 
@@ -1058,6 +1101,8 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         var trailingExclusion: CGFloat
         var dragSource: (() -> RowDragPayload?)?
         var onPressEndedWithoutDrag: (() -> Void)?
+        var onDragChanged: ((CGFloat) -> Void)?
+        var onDragEnded: (() -> Void)?
         var focusesFieldOutsideText: Bool
         /// Право на файлы, открытое на время сессии.
         private var access: (() -> Void)?

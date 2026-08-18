@@ -565,6 +565,29 @@ final class SecurityBoundaryTests: XCTestCase {
     }
 
     @MainActor
+    /// Разделы рельса можно прятать, но не настройки — это дверь обратно к
+    /// самому переключателю. Спрятали активный раздел — выбор уходит на
+    /// первый видимый, спрятали всё — на настройки.
+    func testHiddenRailSectionsPolicy() {
+        XCTAssertEqual(RailVisibilityPolicy.resolve(stored: ["shelf", "settings", "мусор"]), [.shelf])
+        XCTAssertEqual(RailVisibilityPolicy.selection(current: .shelf, visible: [.media, .notes]), .media)
+        XCTAssertEqual(RailVisibilityPolicy.selection(current: .notes, visible: [.media, .notes]), .notes)
+        XCTAssertEqual(RailVisibilityPolicy.selection(current: .settings, visible: [.media]), .settings)
+        XCTAssertEqual(RailVisibilityPolicy.selection(current: .shelf, visible: []), .settings)
+    }
+
+    /// Пустоту от выключенных разделов рельс закрывает интервалом, но с
+    /// потолком: две иконки по разным углам — не колонка, а потеряшки.
+    func testRailSpacingBreathesWithACeiling() {
+        XCTAssertEqual(CurtyTheme.railSpacing(forVisible: 7), CurtyTheme.railButtonSpacing)
+        XCTAssertGreaterThan(
+            CurtyTheme.railSpacing(forVisible: 5),
+            CurtyTheme.railSpacing(forVisible: 7)
+        )
+        XCTAssertEqual(CurtyTheme.railSpacing(forVisible: 2), 16)
+        XCTAssertEqual(CurtyTheme.railSpacing(forVisible: 1), CurtyTheme.railButtonSpacing)
+    }
+
     func testToolOrderSurvivesStaleAndBrokenStoredValues() {
         let available = AppModel.Tool.primary
 

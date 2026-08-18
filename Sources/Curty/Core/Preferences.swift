@@ -63,6 +63,7 @@ final class Preferences: ObservableObject {
         static let clipboardImages = "privacy.clipboardImages"
         static let mediaIntegration = "privacy.mediaIntegration"
         static let toolOrder = "layout.toolOrder"
+        static let hiddenTools = "layout.hiddenTools"
         static let respectFullScreen = "layout.respectFullScreen"
         static let displayTimeZone = "layout.displayTimeZone"
         static let calendarWasGranted = "calendar.wasGranted"
@@ -144,6 +145,11 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(toolOrder, forKey: Key.toolOrder) }
     }
 
+    /// Raw values спрятанных разделов рельса. Пусто — показывается всё.
+    @Published var hiddenTools: [String] {
+        didSet { defaults.set(hiddenTools, forKey: Key.hiddenTools) }
+    }
+
     @Published private(set) var launchAtLoginState: LaunchAtLoginState = .disabled
     @Published private(set) var launchAtLoginMessage: String?
 
@@ -182,6 +188,7 @@ final class Preferences: ObservableObject {
             ?? Locale.current.language.languageCode?.identifier
             ?? "en"
         toolOrder = defaults.stringArray(forKey: Key.toolOrder) ?? []
+        hiddenTools = defaults.stringArray(forKey: Key.hiddenTools) ?? []
         refreshLaunchAtLogin()
     }
 

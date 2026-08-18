@@ -103,6 +103,9 @@ struct PanelRootView: View {
             let files = urls.filter(\.isFileURL)
             guard !files.isEmpty else { return false }
             model.shelf.addUserSelectedFiles(files)
+            // Файл несут на полку — значит, она снова нужна, даже если её
+            // выключали: спрятанная полка молча съела бы бросок.
+            model.setTool(.shelf, hidden: false)
             withAnimation(.easeOut(duration: 0.16)) { model.select(.shelf) }
             return true
         } isTargeted: { isDropTarget = $0 }
@@ -115,6 +118,13 @@ struct PanelRootView: View {
             }
         }
         .animation(.easeOut(duration: 0.14), value: model.pendingConfirmation?.id)
+        .overlay {
+            if model.isEditingRailSections {
+                RailSectionsPlate(model: model)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: model.isEditingRailSections)
         .overlay {
             if isDropTarget {
                 RoundedRectangle(cornerRadius: CurtyTheme.panelCornerRadius, style: .continuous)
@@ -132,11 +142,12 @@ struct PanelRootView: View {
         guard let drag, drag.isReordering else { return 0 }
         if section == drag.tool { return drag.translation }
 
+        let pitch = CurtyTheme.railPitch(forVisible: model.visibleTools.count)
         if drag.originIndex < drag.targetIndex, index > drag.originIndex, index <= drag.targetIndex {
-            return -CurtyTheme.railButtonPitch
+            return -pitch
         }
         if drag.originIndex > drag.targetIndex, index >= drag.targetIndex, index < drag.originIndex {
-            return CurtyTheme.railButtonPitch
+            return pitch
         }
         return 0
     }
@@ -212,9 +223,13 @@ struct PanelRootView: View {
     private func reorderGesture(for section: AppModel.Tool) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                guard let origin = model.orderedTools.firstIndex(of: section) else { return }
-                let steps = Int((value.translation.height / CurtyTheme.railButtonPitch).rounded())
-                let target = min(max(0, origin + steps), model.orderedTools.count - 1)
+                // Считаем по видимым: спрятанные разделы мест на экране не
+                // занимают, а шаг зависит от того, насколько рельс растянут.
+                let visible = model.visibleTools
+                guard let origin = visible.firstIndex(of: section) else { return }
+                let pitch = CurtyTheme.railPitch(forVisible: visible.count)
+                let steps = Int((value.translation.height / pitch).rounded())
+                let target = min(max(0, origin + steps), visible.count - 1)
                 // Deliberately unanimated: this is the pointer's own position.
                 drag = RailDrag(
                     tool: section,
@@ -233,13 +248,13 @@ struct PanelRootView: View {
                         model.select(section)
                         return
                     }
-                    model.moveTool(finished.tool, toIndex: finished.targetIndex)
+                    model.moveTool(finished.tool, toVisibleIndex: finished.targetIndex)
                 }
             }
     }
 
     private var toolRail: some View {
-        VStack(spacing: CurtyTheme.railButtonSpacing) {
+        VStack(spacing: CurtyTheme.railSpacing(forVisible: model.visibleTools.count)) {
             // Плитка — то же лицо, что у иконки приложения: графит с
             // выгравированным янтарным знаком. Рисовать её здесь заново нечем,
             // да и незачем: в бандле лежит готовая уменьшенная копия, и знак в
@@ -272,7 +287,7 @@ struct PanelRootView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 8)
 
-            ForEach(Array(model.orderedTools.enumerated()), id: \.element) { index, section in
+            ForEach(Array(model.visibleTools.enumerated()), id: \.element) { index, section in
                 toolButton(section, at: index)
             }
 
