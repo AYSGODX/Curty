@@ -93,13 +93,15 @@ final class UpdateChecker: ObservableObject {
 
     func check() {
         guard state != .checking else { return }
+        // Отметка до всех выходов: троттлинг обязан работать и для сборки
+        // вне git, иначе её «проверка» повторяется при каждом заходе.
+        lastCheck = Date()
         guard let buildCommit else {
             state = .failed("Сборка сделана вне git-репозитория, сравнивать не с чем.")
             return
         }
 
         state = .checking
-        lastCheck = Date()
         let session = session
         let localDate = buildDate
 

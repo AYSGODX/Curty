@@ -1,5 +1,24 @@
 import Foundation
 
+/// Общий путь записи для всех файлов с данными пользователя: атомарно,
+/// с классом защиты и правами 0600.
+///
+/// Класс защиты выдаётся только внутри контейнера песочницы. Вне его —
+/// например, когда сборку запустили без подписи — запись с ним падает с
+/// EPERM, и без отката данные молча теряются. Урок выучен на JSON-сторах,
+/// но применён был только к ним: хранилище снимков падало тем же путём,
+/// поэтому запись вынесена в одно место.
+enum ProtectedFileWriter {
+    static func write(_ data: Data, to url: URL) throws {
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch let failure as NSError where failure.code == NSFileWriteNoPermissionError {
+            try data.write(to: url, options: [.atomic])
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+}
+
 struct AtomicJSONStore<Value: Codable> {
     let url: URL
 
@@ -29,16 +48,7 @@ struct AtomicJSONStore<Value: Codable> {
     func save(_ value: Value) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(value)
-        // Класс защиты выдаётся только внутри контейнера песочницы. Вне его —
-        // например, когда сборку запустили без подписи — запись с ним падает
-        // с EPERM, и без отката пользователь молча теряет всё, что вводил.
-        do {
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
-        } catch let failure as NSError where failure.code == NSFileWriteNoPermissionError {
-            try data.write(to: url, options: [.atomic])
-        }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try ProtectedFileWriter.write(try encoder.encode(value), to: url)
     }
 
     private func setAside() -> URL? {

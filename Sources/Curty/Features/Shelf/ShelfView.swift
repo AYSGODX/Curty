@@ -13,6 +13,9 @@ import SwiftUI
 /// пространстве и поверх всех окон.
 @MainActor
 enum OpenDialogService {
+    /// Наш диалог выбора файлов уже на экране.
+    static var isPresenting = false
+
     static func warmUp() { _ = NSOpenPanel() }
 }
 
@@ -132,8 +135,10 @@ struct ShelfView: View {
     /// be raised and focused.
     private func chooseFiles() {
         // Повторное нажатие, пока диалог уже на экране, не должно заводить
-        // второй показ того же окна.
-        guard !model.isPresentingDialog else { return }
+        // второй показ того же окна. Флаг свой, а не общий
+        // model.isPresentingDialog: тот поднимается и системным запросом
+        // календаря — и, пока он висел, «Добавить» молча не работала.
+        guard !OpenDialogService.isPresenting else { return }
         let dialog = NSOpenPanel()
         dialog.allowsMultipleSelection = true
         dialog.canChooseFiles = true
@@ -150,10 +155,12 @@ struct ShelfView: View {
         dialog.level = .statusBar
         dialog.collectionBehavior.insert([.fullScreenAuxiliary, .moveToActiveSpace])
 
+        OpenDialogService.isPresenting = true
         model.isPresentingDialog = true
         NSApp.activate(ignoringOtherApps: true)
         dialog.begin { response in
             MainActor.assumeIsolated {
+                OpenDialogService.isPresenting = false
                 model.isPresentingDialog = false
                 guard response == .OK else { return }
                 store.addUserSelectedFiles(dialog.urls)
@@ -222,10 +229,6 @@ struct ShelfView: View {
 
     /// Нажатие в теле строки: выделение, ⌘-выделение и открытие двойным.
     private func press(_ item: ShelfItem, event: NSEvent) {
-        // Плита подтверждения перекрывает список только на глаз: нажатия
-        // раздаются по прямоугольникам, и без проверки клик по плите заодно
-        // выделял бы строку под ней.
-        guard model.pendingConfirmation == nil else { return }
         // Счётчик двойного щелчка у macOS растёт по времени, а не по месту:
         // быстрый клик по соседней строке приходит со счётом 2, хотя никакой
         // это не двойной. Замер: нажатие в 43 пунктах от предыдущего через

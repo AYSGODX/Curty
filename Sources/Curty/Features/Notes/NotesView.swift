@@ -2,7 +2,6 @@ import SwiftUI
 
 struct NotesView: View {
     @ObservedObject var store: NoteStore
-    @ObservedObject var model: AppModel
     @State private var hoveredID: UUID?
     @FocusState private var isEditorFocused: Bool
     @FocusState private var isTitleFocused: Bool
@@ -65,12 +64,7 @@ struct NotesView: View {
                             SelectableRow(
                                 isSelected: store.selectedID == note.id,
                                 isHovered: hoveredID == note.id,
-                                onPress: { _ in
-                                    // Сквозь плиту подтверждения не выделять:
-                                    // нажатия раздаются по прямоугольникам.
-                                    guard model.pendingConfirmation == nil else { return }
-                                    store.selectedID = note.id
-                                }
+                                onPress: { _ in store.selectedID = note.id }
                             ) {
                                 Text(note.listLabel)
                                     .font(.system(

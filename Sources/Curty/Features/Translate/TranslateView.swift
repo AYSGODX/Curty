@@ -16,6 +16,10 @@ struct TranslateView: View {
     /// а просим повторить перевод: пересоздание сбрасывает подготовку пакета.
     @State private var activePair = ""
     @State private var pendingTranslation: Task<Void, Never>?
+    /// Проверка доступности в полёте: новая отменяет предыдущую. Иначе из
+    /// двух проверок побеждала закончившаяся позже — иногда устаревшая, и
+    /// карточка «скачать язык» всплывала на паре, которую уже покинули.
+    @State private var availabilityCheck: Task<Void, Never>?
     /// Сессия поднята только ради загрузки пакета, переводить пока нечего.
     @State private var isPreparingOnly = false
     @FocusState private var focusedField: Field?
@@ -251,12 +255,14 @@ struct TranslateView: View {
     /// Проверяем заранее: если пакета нет, перевод всё равно упрётся в вопрос
     /// системы — пусть он всплывёт при заходе во вкладку, а не под руками.
     private func refreshAvailability() {
-        Task {
+        availabilityCheck?.cancel()
+        availabilityCheck = Task {
             let pair = store.pair ?? TranslationLanguagePolicy.warmupPair(target: store.target)
             let status = try? await LanguageAvailability().status(
                 from: Locale.Language(identifier: pair.from),
                 to: Locale.Language(identifier: pair.to)
             )
+            guard !Task.isCancelled else { return }
             // Называем именно тот язык, которого не хватает: пара может быть
             // любой, а «языки не загружены» после уже сделанной загрузки
             // читается как «всё стёрлось».

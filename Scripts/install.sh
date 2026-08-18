@@ -112,7 +112,19 @@ if mkdir -p "$SCRIPTS_DIRECTORY" 2>/dev/null; then
     # Здесь только переход: сама логика обновления живёт в репозитории, её
     # видно, её можно прочитать, и она приезжает вместе с git pull. Терминал
     # нужен, чтобы работа пережила перезапуск Curty и была видна человеку.
-    printf '#!/bin/bash\nexec /usr/bin/open -a Terminal %q/Scripts/update.command\n' "$ROOT" > "$LAUNCHER"
+    # Путь репозитория вшивается при установке; если папку с тех пор унесли,
+    # запускатель обязан сказать об этом, а не промолчать: кнопка «Обновить»
+    # выглядела бы работающей, делая ровно ничего.
+    cat > "$LAUNCHER" <<LAUNCHER_EOF
+#!/bin/bash
+# Сгенерировано Scripts/install.sh — правится только там.
+TARGET=$(printf '%q' "$ROOT")/Scripts/update.command
+if [ ! -f "\$TARGET" ]; then
+    /usr/bin/osascript -e 'display dialog "Репозиторий Curty не найден по прежнему пути — папку перенесли или удалили. Запустите Scripts/install.sh из нового места, и кнопка обновления снова заработает." buttons {"Понятно"} default button 1 with icon caution with title "Обновление Curty"' >/dev/null 2>&1
+    exit 66
+fi
+exec /usr/bin/open -a Terminal "\$TARGET"
+LAUNCHER_EOF
     chmod 700 "$LAUNCHER"
     # Карантин на самой папке достаётся ей по наследству и мешает запуску.
     # Это обычный каталог в Library, а не контейнер, — снимать его безопасно.

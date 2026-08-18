@@ -144,6 +144,10 @@ private enum PlayerKind: CaseIterable {
     }
 }
 
+/// NSAppleScript не задокументирован потокобезопасным, а выполняется на своей
+/// очереди — это осознанный выбор: на главном потоке зависший плеер держал бы
+/// весь интерфейс до таймаута. Страховка — единственный экземпляр адаптера и
+/// последовательная очередь: одновременных вызовов не бывает.
 private final class FixedAppleScriptMediaAdapter: @unchecked Sendable {
     private typealias Candidate = (player: PlayerKind, snapshot: MediaSnapshot)
 
@@ -321,6 +325,9 @@ final class MediaStore: ObservableObject {
         lastError = nil
         needsAutomationPermission = false
         isEnabled = false
+        // Уровень до немоты — из прошлого сеанса; переживать выключение
+        // интеграции ему незачем.
+        volumeBeforeMute = nil
     }
 
     /// Every snapshot costs an AppleScript round trip to Music and Spotify, and
@@ -366,7 +373,9 @@ final class MediaStore: ObservableObject {
     /// перепрыгивает». Действие человека важнее фонового опроса и вытесняет
     /// его; ответ опроса отбрасывается по смене поколения. Друг друга действия
     /// не вытесняют: там остаётся прежняя защита по таймауту, чтобы зависший
-    /// скрипт не собрал за собой очередь.
+    /// скрипт не собрал за собой очередь. Вытесняется учёт, а не исполнение:
+    /// очередь последовательная, и команда физически дождётся, пока зависший
+    /// опрос не отпустит её, — не дольше таймаута.
     #if DEBUG
     /// Правило вытеснения — причина исправленной жалобы, а не деталь: проверять
     /// его через живой AppleScript было бы нечем.

@@ -67,9 +67,6 @@ struct SnippetsView: View {
                                 isSelected: selectedID == snippet.id,
                                 isHovered: hoveredID == snippet.id,
                                 onPress: { _ in
-                                    // Сквозь плиту подтверждения не выделять:
-                                    // нажатия раздаются по прямоугольникам.
-                                    guard model.pendingConfirmation == nil else { return }
                                     selectedID = snippet.id
                                     // Клик по строке сам по себе фокус из поля
                                     // поиска не уводит, а без этого ⌘C

@@ -72,6 +72,48 @@ if [ -n "$LAUNCH_USERS" ] && [ "$LAUNCH_USERS" != "$UPDATE_FILE" ]; then
     FAILURES=1
 fi
 
+# AppleScript — вторая по силе возможность после запуска процессов: им
+# управляются плееры, а мог бы управляться кто угодно. Место ему ровно в
+# одном файле.
+MEDIA_FILE="$ROOT/Sources/Curty/Features/Media/MediaStore.swift"
+APPLESCRIPT_USERS="$(grep -rlE 'NSAppleScript|OSAScript|NSUserAppleScriptTask' "$ROOT/Sources" 2>/dev/null || true)"
+if [ -n "$APPLESCRIPT_USERS" ] && [ "$APPLESCRIPT_USERS" != "$MEDIA_FILE" ]; then
+    echo "AppleScript допустим только в MediaStore.swift, найден в: $APPLESCRIPT_USERS" >&2
+    FAILURES=1
+fi
+
+# Список окон читается только ради геометрии и только в PanelController.
+# Имена чужих окон — уже подглядывание: их не читаем нигде.
+if scan 'kCGWindowName' "$ROOT/Sources"; then
+    echo "Чтение имён чужих окон запрещено (kCGWindowName)." >&2
+    FAILURES=1
+fi
+PANEL_FILE="$ROOT/Sources/Curty/App/PanelController.swift"
+WINDOWLIST_USERS="$(grep -rlE 'CGWindowListCopyWindowInfo' "$ROOT/Sources" 2>/dev/null || true)"
+if [ -n "$WINDOWLIST_USERS" ] && [ "$WINDOWLIST_USERS" != "$PANEL_FILE" ]; then
+    echo "Список окон допустим только в PanelController.swift, найден в: $WINDOWLIST_USERS" >&2
+    FAILURES=1
+fi
+
+# Права, которых у Curty быть не должно. Новое право — осознанное решение
+# с правкой этого списка, а не тихая строчка в диффе entitlements.
+for entitlement in \
+    'com.apple.security.network.server' \
+    'com.apple.security.files.user-selected.read-write' \
+    'com.apple.security.files.downloads' \
+    'com.apple.security.files.all' \
+    'com.apple.security.device.camera' \
+    'com.apple.security.device.audio-input' \
+    'com.apple.security.personal-information.location' \
+    'com.apple.security.personal-information.addressbook' \
+    'com.apple.security.cs.disable-library-validation' \
+    'com.apple.security.cs.allow-unsigned-executable-memory'; do
+    if scan "$entitlement" "$ROOT/Config/Curty.entitlements"; then
+        echo "Запрещённый entitlement: $entitlement" >&2
+        FAILURES=1
+    fi
+done
+
 # Адрес проверки обновлений должен оставаться константой: иначе запрос уедет
 # туда, куда его попросит любой ответ сервера.
 if ! scan 'apiHost = "api.github.com"' "$UPDATE_FILE"; then

@@ -932,10 +932,18 @@ final class RowPressRouter {
     /// Ниже этого смещения нажатие остаётся нажатием, а не перетаскиванием.
     private static let dragThreshold: CGFloat = 4
 
+    /// Панель умеет накрываться модальной плитой — вопросом подтверждения, —
+    /// но роутер слоёв не видит: он раздаёт нажатия по прямоугольникам, и
+    /// клик по плите доставался бы строке под ней. О модальности ему сообщает
+    /// одно правило снаружи — вместо guard, который приходилось копировать в
+    /// каждую вьюху со строками и который в четырёх копиях уже разъезжался.
+    var isBlocked: @MainActor () -> Bool = { false }
+
     /// Отдаёт событие области, в которую пришлось нажатие. Событие не
     /// поглощается — окно продолжит обычную доставку, чтобы кнопки жили как
     /// жили; область только успевает выделить строку.
     func route(_ event: NSEvent) {
+        guard !isBlocked() else { return }
         guard let window = event.window else { return }
         let point = event.locationInWindow
         pressed = nil
@@ -1104,8 +1112,10 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
         var onDragChanged: ((CGFloat) -> Void)?
         var onDragEnded: (() -> Void)?
         var focusesFieldOutsideText: Bool
-        /// Право на файлы, открытое на время сессии.
-        private var access: (() -> Void)?
+        /// Право на файлы, открытое на время сессии. nonisolated(unsafe) —
+        /// только ради deinit: тот не изолирован, а право обязано закрыться,
+        /// даже если вид умер раньше конца сессии. Пишется всегда на главном.
+        nonisolated(unsafe) private var access: (() -> Void)?
 
         init(
             action: @escaping (NSEvent) -> Void,
@@ -1120,6 +1130,12 @@ private struct LeftMouseDownCatcher: NSViewRepresentable {
             self.onPressEndedWithoutDrag = onPressEndedWithoutDrag
             self.focusesFieldOutsideText = focusesFieldOutsideText
             super.init(frame: .zero)
+        }
+
+        deinit {
+            // Обычно право закрывает конец сессии перетаскивания; вид,
+            // умерший раньше него, не должен унести открытое право с собой.
+            access?()
         }
 
         /// Клик в поля прорези — фокус текстовому виду над подложкой. Клик по

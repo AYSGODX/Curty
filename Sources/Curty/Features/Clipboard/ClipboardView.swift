@@ -85,12 +85,7 @@ struct ClipboardView: View {
                             SelectableRow(
                                 isSelected: selectedID == entry.id,
                                 isHovered: hoveredID == entry.id,
-                                onPress: { _ in
-                                    // Сквозь плиту подтверждения не выделять:
-                                    // нажатия раздаются по прямоугольникам.
-                                    guard model.pendingConfirmation == nil else { return }
-                                    selectedID = entry.id
-                                },
+                                onPress: { _ in selectedID = entry.id },
                                 pressExclusionTrailing: CurtyTheme.rowActionClusterWidth
                             ) {
                             HStack(spacing: 9) {

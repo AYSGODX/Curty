@@ -250,6 +250,14 @@ final class PanelController {
         }
         model.onCloseRequest = { [weak self] in self?.dismiss() }
 
+        // Пока на экране вопрос подтверждения, нажатия по строкам не
+        // раздаются — правило одно и живёт здесь. Плита разделов рельса под
+        // это правило не попадает нарочно: её собственные строки ездят через
+        // тот же роутер.
+        RowPressRouter.shared.isBlocked = { [weak model = self.model] in
+            model?.pendingConfirmation != nil
+        }
+
         // SwiftUI рисует выпадающие списки настоящим меню AppKit, и оно
         // сообщает о начале и конце показа. Другого способа узнать, что список
         // открыт, у вьюхи нет.
@@ -318,7 +326,14 @@ final class PanelController {
         position(on: screenUnderMouse() ?? NSScreen.main)
         model.isPanelOpen = true
         panel.ignoresMouseEvents = false
-        panel.alphaValue = 1
+        // Затухание из hide() могло ещё идти, а прямое присваивание альфы
+        // его не отменяет: анимация дотягивала панель до нуля уже после
+        // открытия, и самолечилка закрывала «невидимую» панель. Нулевая
+        // анимация замещает старую.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            panel.animator().alphaValue = 1
+        }
         // Форма окна прозрачная, поэтому AppKit пересчитывает тень по альфе
         // только по явной просьбе.
         panel.invalidateShadow()

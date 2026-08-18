@@ -108,6 +108,7 @@ final class ShelfStore: ObservableObject {
     /// от этого зависит, можно ли убирать запись из истории буфера.
     @discardableResult
     func addUserSelectedFiles(_ urls: [URL]) -> Bool {
+        var added = false
         for url in urls where url.isFileURL && !items.contains(where: { $0.url == url }) {
             do {
                 let bookmark = try url.bookmarkData(
@@ -125,6 +126,7 @@ final class ShelfStore: ObservableObject {
                     ),
                     at: 0
                 )
+                added = true
                 lastError = nil
             } catch {
                 // Локализованный текст один и тот же для десятка разных причин,
@@ -135,7 +137,7 @@ final class ShelfStore: ObservableObject {
                     + "\(failure.localizedDescription) [\(failure.domain) \(failure.code)]"
             }
         }
-        persist()
+        if added { persist() }
         return urls.allSatisfy { url in items.contains { $0.url == url } }
     }
 

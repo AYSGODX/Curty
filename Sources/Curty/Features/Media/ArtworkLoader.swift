@@ -62,7 +62,12 @@ final class ArtworkLoader: ObservableObject {
         image = nil
         task = Task { [session] in
             guard let data = try? await Self.fetch(url, using: session),
-                  let loaded = NSImage(data: data) else { return }
+                  let loaded = NSImage(data: data) else {
+                // Неудача не должна замораживать обложку до смены трека:
+                // сброс ключа даёт следующему опросу попробовать снова.
+                if !Task.isCancelled, self.currentKey == key { self.currentKey = nil }
+                return
+            }
             guard !Task.isCancelled, self.currentKey == key else { return }
             self.store(loaded, for: key)
         }

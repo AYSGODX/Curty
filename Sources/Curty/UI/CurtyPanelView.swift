@@ -411,7 +411,7 @@ struct PanelRootView: View {
             case .snippets: SnippetsView(store: model.snippets, model: model)
             case .calendar: CalendarView(store: model.calendar, preferences: model.preferences) { model.requestPanelClose() }
             case .translate: TranslateView(store: model.translate) { model.requestPanelClose() }
-            case .notes: NotesView(store: model.notes, model: model)
+            case .notes: NotesView(store: model.notes)
             case .settings: SettingsPane(model: model)
             }
         }
