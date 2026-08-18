@@ -1,28 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// Диалог выбора файлов, созданный заранее и живущий один на всё приложение.
+/// Прогрев службы диалогов при запуске.
 ///
-/// В песочнице NSOpenPanel() не просто объект: за ним поднимается связь с
-/// внешней службой диалогов macOS. Замер по журналу: само создание стоило
-/// 376 мс при первом нажатии и 140 мс при каждом следующем — и это была вся
-/// ощутимая задержка кнопки «Добавить» (показ готового окна — ~30 мс).
-/// Поэтому диалог создаётся при запуске, пока никто не ждёт, а кнопка лишь
-/// показывает готовый. Заодно окно само помнит последнюю папку.
+/// В песочнице ПЕРВЫЙ NSOpenPanel() в процессе стоит ~380 мс — за ним
+/// поднимается связь с внешней службой диалогов, — а каждый следующий ~140.
+/// Прогревочный экземпляр выбрасывается сразу. Держать один живой диалог на
+/// всё приложение пробовали — вышло хуже: окно, созданное при запуске,
+/// привязывается к пространству рабочего стола, и открытое из полноэкранного
+/// приложения утаскивало на рабочий стол, а на самом рабочем столе всплывало
+/// под шторкой. Свежий диалог на каждое нажатие рождается в текущем
+/// пространстве и поверх всех окон.
 @MainActor
-enum SharedOpenDialog {
-    static let dialog: NSOpenPanel = {
-        let dialog = NSOpenPanel()
-        dialog.allowsMultipleSelection = true
-        dialog.canChooseFiles = true
-        dialog.canChooseDirectories = true
-        dialog.prompt = "Добавить"
-        dialog.message = "Выберите файлы для полки Curty"
-        return dialog
-    }()
-
-    /// Оплатить создание заранее — вызывается при старте приложения.
-    static func warmUp() { _ = dialog }
+enum OpenDialogService {
+    static func warmUp() { _ = NSOpenPanel() }
 }
 
 struct ShelfView: View {
@@ -143,7 +134,21 @@ struct ShelfView: View {
         // Повторное нажатие, пока диалог уже на экране, не должно заводить
         // второй показ того же окна.
         guard !model.isPresentingDialog else { return }
-        let dialog = SharedOpenDialog.dialog
+        let dialog = NSOpenPanel()
+        dialog.allowsMultipleSelection = true
+        dialog.canChooseFiles = true
+        dialog.canChooseDirectories = true
+        dialog.prompt = "Добавить"
+        dialog.message = "Выберите файлы для полки Curty"
+        // Диалог обязан оказаться выше шторки при любом исходе гонки: клик по
+        // кнопке делает шторку ключевым окном, активация приложения поднимает
+        // ключевое окно, и на части машин диалог всплывал под шторкой. Уровни
+        // решают порядок без таймингов: шторка на время диалога опускается на
+        // обычный этаж, а диалог поднимается на её постоянный.
+        // fullScreenAuxiliary — чтобы он показывался и поверх полноэкранных
+        // окон, moveToActiveSpace — в текущем пространстве, а не в родном.
+        dialog.level = .statusBar
+        dialog.collectionBehavior.insert([.fullScreenAuxiliary, .moveToActiveSpace])
 
         model.isPresentingDialog = true
         NSApp.activate(ignoringOtherApps: true)
