@@ -39,7 +39,7 @@ final class SecurityBoundaryTests: XCTestCase {
     /// средствами AppKit, своим настоящим путём.
     @MainActor
     func testDraggedFileKeepsItsRealPath() throws {
-        let store = ShelfStore()
+        let store = ShelfStore(directory: try makeScratchDirectory(), vault: try makeScratchDirectory())
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("curty-\(UUID().uuidString).txt")
         try "перетаскивание".write(to: file, atomically: true, encoding: .utf8)
@@ -77,7 +77,7 @@ final class SecurityBoundaryTests: XCTestCase {
     /// не начинается вовсе.
     @MainActor
     func testDraggingSelectionCarriesEveryFile() throws {
-        let store = ShelfStore()
+        let store = ShelfStore(directory: try makeScratchDirectory(), vault: try makeScratchDirectory())
         let directory = FileManager.default.temporaryDirectory
         let first = directory.appendingPathComponent("curty-a-\(UUID().uuidString).txt")
         let second = directory.appendingPathComponent("curty-b-\(UUID().uuidString).txt")
@@ -111,14 +111,11 @@ final class SecurityBoundaryTests: XCTestCase {
     /// файла оставлял бы в истории запись о том, что на полке и так есть.
     @MainActor
     func testShelfReportsWhetherTheFileEndedUpThere() throws {
-        let store = ShelfStore()
+        let store = ShelfStore(directory: try makeScratchDirectory(), vault: try makeScratchDirectory())
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("curty-\(UUID().uuidString).txt")
         try "перенос".write(to: file, atomically: true, encoding: .utf8)
-        defer {
-            store.items.filter { $0.url == file }.forEach { store.remove($0) }
-            try? FileManager.default.removeItem(at: file)
-        }
+        defer { try? FileManager.default.removeItem(at: file) }
 
         XCTAssertTrue(store.addUserSelectedFiles([file]), "файл должен оказаться на полке")
         XCTAssertEqual(store.items.filter { $0.url == file }.count, 1)
@@ -130,6 +127,91 @@ final class SecurityBoundaryTests: XCTestCase {
             .appendingPathComponent("curty-нет-такого-\(UUID().uuidString).txt")
         XCTAssertFalse(store.addUserSelectedFiles([missing]), "несуществующий файл принять нельзя")
         XCTAssertNotNil(store.lastError, "отказ должен быть объяснён, а не проглочен")
+    }
+
+    /// Снимок из буфера — собственный файл полки: он живёт только ради своей
+    /// записи. Сняли запись — файл удаляется, иначе хранилище копит невидимые
+    /// снимки до упора в лимит 250 МБ. Чужих файлов это не касается: полка
+    /// держит лишь закладку, и удаление записи не трогает сам файл.
+    @MainActor
+    func testRemovingOwnedShelfItemDeletesItsFile() throws {
+        let vault = try makeScratchDirectory()
+        let store = ShelfStore(directory: try makeScratchDirectory(), vault: vault)
+
+        let image = vault.appendingPathComponent("Clipboard-\(UUID().uuidString).png")
+        try Data("снимок".utf8).write(to: image)
+        store.addOwnedFile(image)
+        XCTAssertEqual(store.items.count, 1)
+
+        store.remove(store.items[0])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: image.path), "свой файл уходит вместе с записью")
+
+        // «Очистить полку» — то же правило для всех записей разом.
+        let second = vault.appendingPathComponent("Clipboard-\(UUID().uuidString).png")
+        try Data("второй".utf8).write(to: second)
+        store.addOwnedFile(second)
+
+        let foreign = FileManager.default.temporaryDirectory
+            .appendingPathComponent("curty-чужой-\(UUID().uuidString).txt")
+        try "чужой".write(to: foreign, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: foreign) }
+        XCTAssertTrue(store.addUserSelectedFiles([foreign]))
+
+        store.clearReferences()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.path), "чужой файл остаётся на диске")
+    }
+
+    /// Файл без записи на полке не нужен никому: он пережил свою запись из-за
+    /// прежней ошибки или сбоя между двумя записями. Загрузка подметает такие,
+    /// не трогая ни файлы с записями, ни сам список.
+    @MainActor
+    func testLoadSweepsVaultFilesWithoutAShelfRow() throws {
+        let directory = try makeScratchDirectory()
+        let vault = try makeScratchDirectory()
+
+        let kept = vault.appendingPathComponent("Clipboard-с-записью.png")
+        let orphan = vault.appendingPathComponent("Clipboard-сирота.png")
+        try Data("нужен".utf8).write(to: kept)
+        try Data("забыт".utf8).write(to: orphan)
+
+        // Первая полка знает только про один файл и сохраняет это в список.
+        let first = ShelfStore(directory: directory, vault: vault)
+        first.addOwnedFile(kept)
+
+        // Вторая — как после перезапуска: читает список и подметает лишнее.
+        let second = ShelfStore(directory: directory, vault: vault)
+        second.load()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: kept.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+        XCTAssertEqual(second.items.count, 1)
+    }
+
+    /// Охранник исполняемого держит и прямой список расширений, и семейства
+    /// типов системы. inetloc и fileloc открывают произвольную ссылку так же
+    /// молча, как webloc, — прежний список их не знал и пропускал без
+    /// подтверждения.
+    func testExecutableGateCatchesLinkFilesAndScriptFamilies() {
+        let dangerous = [
+            "апп.app", "установщик.pkg", "скрипт.sh", "команда.command",
+            "ссылка.webloc", "ссылка.url", "ссылка.inetloc", "файл.fileloc",
+            "сценарий.scpt", "пакет.scptd", "настройки.terminal",
+            "архив.jar", "образ.dmg",
+        ]
+        for name in dangerous {
+            XCTAssertTrue(ExecutableFilePolicy.isPotentiallyExecutable(name), name)
+        }
+
+        // Семейства системы: питон — скрипт, iso — образ диска, хотя в прямом
+        // списке их нет.
+        XCTAssertTrue(ExecutableFilePolicy.isPotentiallyExecutable("скрипт.py"))
+        XCTAssertTrue(ExecutableFilePolicy.isPotentiallyExecutable("образ.iso"))
+
+        let benign = ["отчёт.pdf", "фото.png", "текст.txt", "видео.mp4", "README"]
+        for name in benign {
+            XCTAssertFalse(ExecutableFilePolicy.isPotentiallyExecutable(name), name)
+        }
     }
 
     func testTextTakenToTheTranslatorLeavesTheHistory() {
@@ -226,8 +308,8 @@ final class SecurityBoundaryTests: XCTestCase {
     }
 
     @MainActor
-    func testDeletedNoteComesBackToItsOwnPlace() {
-        let store = NoteStore()
+    func testDeletedNoteComesBackToItsOwnPlace() throws {
+        let store = NoteStore(directory: try makeScratchDirectory())
         store.add()
         store.add()
         store.add()
@@ -244,8 +326,8 @@ final class SecurityBoundaryTests: XCTestCase {
     }
 
     @MainActor
-    func testDeletedSnippetComesBackToItsOwnPlace() {
-        let store = SnippetStore()
+    func testDeletedSnippetComesBackToItsOwnPlace() throws {
+        let store = SnippetStore(directory: try makeScratchDirectory())
         store.add(title: "первый", body: "1")
         store.add(title: "второй", body: "2")
         store.add(title: "третий", body: "3")
@@ -293,8 +375,8 @@ final class SecurityBoundaryTests: XCTestCase {
     /// элемент. Перескакивающие строки сбивают с толку — глаз ищет запись
     /// там, где её оставил.
     @MainActor
-    func testEditingDoesNotReorderLists() {
-        let notes = NoteStore()
+    func testEditingDoesNotReorderLists() throws {
+        let notes = NoteStore(directory: try makeScratchDirectory())
         notes.add()
         notes.add()
         let newest = notes.items[0].id
@@ -303,7 +385,7 @@ final class SecurityBoundaryTests: XCTestCase {
         notes.update(older, text: "правка не должна двигать заметку")
         XCTAssertEqual(notes.items.map(\.id), [newest, older])
 
-        let snippets = SnippetStore()
+        let snippets = SnippetStore(directory: try makeScratchDirectory())
         snippets.add(title: "первый", body: "1")
         snippets.add(title: "второй", body: "2")
         XCTAssertEqual(snippets.filteredItems.map(\.title), ["второй", "первый"])
@@ -358,6 +440,27 @@ final class SecurityBoundaryTests: XCTestCase {
 
         // Идущая встреча не прошедшая: ссылка на неё нужна именно сейчас.
         XCTAssertEqual(visible.map(\.id), ["идёт сейчас", "впереди"])
+    }
+
+    /// У повторяющейся встречи все повторения делят один системный
+    /// идентификатор — это идентификатор серии. Списку нужны различимые:
+    /// ForEach с одинаковыми id теряет строки, и из пяти ежедневных
+    /// стендапов на неделе был виден один.
+    @MainActor
+    func testRecurringMeetingOccurrencesGetDistinctIDs() {
+        let monday = Date(timeIntervalSince1970: 1_000_000)
+        let tuesday = monday.addingTimeInterval(86_400)
+
+        let first = CalendarStore.occurrenceID(identifier: "серия", start: monday)
+        let second = CalendarStore.occurrenceID(identifier: "серия", start: tuesday)
+        XCTAssertNotEqual(first, second, "повторения различимы по началу")
+
+        // Одно и то же повторение узнаваемо между перезагрузками — иначе
+        // список пересобирался бы без нужды.
+        XCTAssertEqual(first, CalendarStore.occurrenceID(identifier: "серия", start: monday))
+
+        // Событие без идентификатора список не роняет.
+        XCTAssertFalse(CalendarStore.occurrenceID(identifier: nil, start: monday).isEmpty)
     }
 
     func testUpdateIsOfferedOnlyForNewerRemoteCommits() {
@@ -500,6 +603,39 @@ final class SecurityBoundaryTests: XCTestCase {
         XCTAssertNil(TranslationLanguagePolicy.pair(source: nil, target: "ru"))
         XCTAssertNil(TranslationLanguagePolicy.pair(source: "ru", target: "ru"))
         XCTAssertEqual(TranslationLanguagePolicy.pair(source: "vi", target: "ru")?.from, "vi")
+    }
+
+    /// Кнопка ⇄ обязана менять языки и тексты местами, не теряя ни буквы.
+    /// Прежде она стирала оба поля: didSet у языков чистит перевод, и обмен
+    /// после них закидывал в поле ввода уже пустую строку.
+    @MainActor
+    func testSwappingLanguagesKeepsBothTexts() {
+        let suiteName = "dev.curty.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = TranslateStore(preferences: Preferences(defaults: defaults))
+        store.source = .fixed("en")
+        store.target = "ru"
+        store.sourceText = "hello"
+        store.translatedText = "привет"
+
+        store.swapLanguages()
+
+        XCTAssertEqual(store.sourceText, "привет")
+        XCTAssertEqual(store.translatedText, "hello")
+        XCTAssertEqual(store.source, .fixed("ru"))
+        XCTAssertEqual(store.target, "en")
+
+        // Перевода ещё нет — меняются только языки: обмен с пустой строкой
+        // стёр бы введённое.
+        store.sourceText = "typed"
+        store.translatedText = ""
+        store.swapLanguages()
+        XCTAssertEqual(store.sourceText, "typed")
+        XCTAssertEqual(store.translatedText, "")
+        XCTAssertEqual(store.source, .fixed("en"))
+        XCTAssertEqual(store.target, "ru")
     }
 
     func testPanelActivationZoneAndCloseTiming() {
@@ -677,6 +813,18 @@ final class SecurityBoundaryTests: XCTestCase {
         )
         XCTAssertTrue(message.contains("Программы"))
         XCTAssertFalse(message.contains("Invalid argument"))
+    }
+
+    /// Каждому стору — свой временный каталог. Сторы принимают каталог
+    /// параметром именно ради тестов: до этого swift test писал в настоящую
+    /// папку Application Support пользователя — тестовые сниппеты и пустую
+    /// полку. Уборка — через teardown, чтобы каталог пережил defer теста.
+    private func makeScratchDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CurtyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
     }
 
     private func makePNG(width: Int, height: Int) -> Data {

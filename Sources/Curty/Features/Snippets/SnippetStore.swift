@@ -14,9 +14,13 @@ final class SnippetStore: ObservableObject {
     @Published var lastError: String?
     @Published private(set) var pendingDeletion: PendingDeletion<Snippet>?
 
-    private let store = AtomicJSONStore<[Snippet]>(
-        url: ApplicationPaths.supportDirectory.appendingPathComponent("snippets.json")
-    )
+    private let store: AtomicJSONStore<[Snippet]>
+
+    /// Каталог подставляется в тестах: черновикам swift test не место в
+    /// настоящей папке Application Support пользователя.
+    init(directory: URL = ApplicationPaths.supportDirectory) {
+        store = AtomicJSONStore(url: directory.appendingPathComponent("snippets.json"))
+    }
     private var undoWindow: Task<Void, Never>?
 
     var filteredItems: [Snippet] {

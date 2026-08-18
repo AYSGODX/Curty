@@ -327,7 +327,10 @@ final class PanelController {
     }
 
     func close() {
-        closeWorkItem = nil
+        // Отменить, а не просто сбросить ссылку: DispatchWorkItem без
+        // cancel() всё равно срабатывает, и осиротевший таймер захлопывал
+        // панель, открытую заново мгновением позже.
+        cancelClose()
         guard !model.keepsPanelOpen else { return }
         hide()
     }
@@ -335,7 +338,7 @@ final class PanelController {
     /// Asked for explicitly, so it ignores the pin: the user is being handed
     /// over to another app and the panel would only sit on top of the result.
     func dismiss() {
-        closeWorkItem = nil
+        cancelClose()
         hide()
     }
 
@@ -508,7 +511,13 @@ final class PanelController {
     private func scheduleClose() {
         guard closeWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in
-            Task { @MainActor in self?.close() }
+            Task { @MainActor in
+                // Между срабатыванием таймера и этой задачей могло успеть
+                // вклиниться открытие: закрытие уже отменено — не закрывать.
+                guard let self, self.closeWorkItem != nil else { return }
+                self.closeWorkItem = nil
+                self.close()
+            }
         }
         closeWorkItem = work
         DispatchQueue.main.asyncAfter(

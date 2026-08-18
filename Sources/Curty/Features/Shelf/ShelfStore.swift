@@ -18,13 +18,37 @@ struct ShelfItem: Identifiable, Equatable {
 
     var isAvailable: Bool { url != nil }
 
-    /// Только по расширению: isExecutableFile для файла вне контейнера
-    /// вызывается без открытого доступа и всегда отвечает «нет», то есть
-    /// половина проверки просто не работала. webloc и url добавлены потому,
-    /// что открывают произвольную ссылку без всякого предупреждения.
-    var isPotentiallyExecutable: Bool {
-        let extensions = ["app", "pkg", "command", "workflow", "scpt", "dmg", "webloc", "url", "sh", "tool"]
-        return extensions.contains((name as NSString).pathExtension.lowercased())
+    var isPotentiallyExecutable: Bool { ExecutableFilePolicy.isPotentiallyExecutable(name) }
+}
+
+/// Что полка считает потенциально исполняемым — то, что открывается не
+/// просмотром, а действием: запуском, установкой, переходом по ссылке.
+/// Проверка только по имени: isExecutableFile для файла вне контейнера
+/// вызывается без открытого доступа и всегда отвечает «нет», то есть
+/// половина такой проверки просто не работала.
+enum ExecutableFilePolicy {
+    /// Прямой список — страховка на случаи, которых система не знает.
+    /// Файлы-ссылки (webloc, url, inetloc, fileloc) здесь потому, что
+    /// открывают произвольный адрес без всякого предупреждения; terminal —
+    /// потому, что несёт команду запуска в настройках Терминала.
+    static let extensions: Set<String> = [
+        "app", "pkg", "mpkg", "xip", "command", "workflow", "tool",
+        "scpt", "scptd", "applescript", "jar", "sh", "dmg",
+        "webloc", "url", "inetloc", "fileloc", "terminal",
+    ]
+
+    /// Семейства типов закрывают целые классы разом — скрипты любого языка,
+    /// образы дисков, интернет-ссылки, — а не отдельные написания.
+    private static let dangerousTypes: [UTType] = [
+        .executable, .script, .diskImage, .internetLocation,
+    ]
+
+    static func isPotentiallyExecutable(_ name: String) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty else { return false }
+        if extensions.contains(ext) { return true }
+        guard let type = UTType(filenameExtension: ext) else { return false }
+        return dangerousTypes.contains { type.conforms(to: $0) }
     }
 }
 
@@ -42,9 +66,20 @@ final class ShelfStore: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
     @Published var lastError: String?
 
-    private let store = AtomicJSONStore<[StoredShelfItem]>(
-        url: ApplicationPaths.supportDirectory.appendingPathComponent("shelf.json")
-    )
+    private let store: AtomicJSONStore<[StoredShelfItem]>
+    /// Каталог собственных файлов полки — снимков, сохранённых из буфера.
+    private let vaultDirectory: URL
+
+    /// Пути хранения подставляются в тестах: swift test не имеет права
+    /// работать с настоящей папкой Application Support пользователя — а до
+    /// того, как каталог стал параметром, работал и переписывал её.
+    init(
+        directory: URL = ApplicationPaths.supportDirectory,
+        vault: URL = ApplicationPaths.clipboardVault
+    ) {
+        store = AtomicJSONStore(url: directory.appendingPathComponent("shelf.json"))
+        vaultDirectory = vault
+    }
 
     /// Загрузка ничего не удаляет и по умолчанию ничего не пишет. Раньше здесь
     /// отсеивались неразрешившиеся закладки, и результат отсева тут же
@@ -63,6 +98,9 @@ final class ShelfStore: ObservableObject {
         }
         // Единственная причина писать при загрузке — обновлённые закладки.
         if refreshedBookmarks { persist() }
+        // После повреждённого файла не подметаем: записи о снимках лежали
+        // именно в нём, и сами файлы — всё, что от них осталось.
+        if result.corruptedBackup == nil { sweepOrphanedVaultFiles() }
     }
 
     /// Отвечает, лежат ли теперь на полке все переданные файлы. Уже лежавший
@@ -118,11 +156,16 @@ final class ShelfStore: ObservableObject {
 
     func remove(_ item: ShelfItem) {
         items.removeAll { $0.id == item.id }
+        deleteOwnedFile(of: item)
         persist()
     }
 
+    /// Чужие файлы остаются на диске — полка держала лишь закладки. Свои
+    /// снимки уходят вместе с записями: кроме полки, их никто не видит.
     func clearReferences() {
+        let removed = items
         items.removeAll()
+        removed.forEach { deleteOwnedFile(of: $0) }
         persist()
     }
 
@@ -288,8 +331,41 @@ final class ShelfStore: ObservableObject {
         return perform(url)
     }
 
+    /// Собственный файл полки живёт только ради своей записи: сняли запись —
+    /// удаляется и файл. Иначе хранилище копит невидимые снимки до упора в
+    /// лимит 250 МБ, и «удаление» не освобождает ни байта.
+    private func deleteOwnedFile(of item: ShelfItem) {
+        guard case .ownedFile(let path) = item.location else { return }
+        let url = URL(fileURLWithPath: path)
+        // Пути из файла состояния не доверяем: удалять можно только внутри
+        // своего хранилища.
+        guard isInsideVault(url) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Файл без записи на полке не нужен никому: он пережил свою запись из-за
+    /// прежней ошибки или сбоя между двумя записями. Подметаем при загрузке —
+    /// единственный момент, когда список заведомо полон и никто не пишет.
+    private func sweepOrphanedVaultFiles() {
+        let referenced = Set(items.compactMap { item -> String? in
+            guard case .ownedFile(let path) = item.location else { return nil }
+            return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        })
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: vaultDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return }
+        for file in files {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+                  !referenced.contains(file.resolvingSymlinksInPath().standardizedFileURL.path)
+            else { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
     private func isInsideVault(_ url: URL) -> Bool {
-        let root = ApplicationPaths.clipboardVault.resolvingSymlinksInPath().standardizedFileURL.path
+        let root = vaultDirectory.resolvingSymlinksInPath().standardizedFileURL.path
         let candidate = url.resolvingSymlinksInPath().standardizedFileURL.path
         return candidate == root || candidate.hasPrefix(root + "/")
     }

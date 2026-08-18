@@ -44,9 +44,13 @@ final class NoteStore: ObservableObject {
     @Published var lastError: String?
     @Published private(set) var pendingDeletion: PendingDeletion<ScratchNote>?
 
-    private let store = AtomicJSONStore<[ScratchNote]>(
-        url: ApplicationPaths.supportDirectory.appendingPathComponent("notes.json")
-    )
+    private let store: AtomicJSONStore<[ScratchNote]>
+
+    /// Каталог подставляется в тестах: черновикам swift test не место в
+    /// настоящей папке Application Support пользователя.
+    init(directory: URL = ApplicationPaths.supportDirectory) {
+        store = AtomicJSONStore(url: directory.appendingPathComponent("notes.json"))
+    }
     private var pendingSave: DispatchWorkItem?
     private var undoWindow: Task<Void, Never>?
 

@@ -171,9 +171,19 @@ final class TranslateStore: ObservableObject {
     func swapLanguages() {
         guard let from = resolvedSource else { return }
         let previousTarget = target
+        // Тексты снимаются до смены языков: didSet у source и target чистят
+        // translatedText, и обмен после них закидывал в поле ввода уже пустую
+        // строку — набранный текст пропадал безвозвратно.
+        let typed = sourceText
+        let translated = translatedText
         target = from
         source = .fixed(previousTarget)
-        swap(&sourceText, &translatedText)
+        // Пока перевода нет, меняются только языки: обмен с пустой строкой
+        // стёр бы введённое тем же путём.
+        if !translated.isEmpty {
+            sourceText = translated
+            translatedText = typed
+        }
         status = .idle
     }
 }

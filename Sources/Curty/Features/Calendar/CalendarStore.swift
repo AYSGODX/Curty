@@ -125,6 +125,15 @@ final class CalendarStore: ObservableObject {
         meetings.filter { $0.end > now }
     }
 
+    /// У повторяющейся встречи все повторения делят один eventIdentifier —
+    /// это идентификатор серии, а не события. Списку нужны различимые:
+    /// ForEach с одинаковыми id теряет строки, и из пяти ежедневных
+    /// стендапов на неделе был виден один.
+    static func occurrenceID(identifier: String?, start: Date) -> String {
+        guard let identifier else { return UUID().uuidString }
+        return "\(identifier)@\(start.timeIntervalSinceReferenceDate)"
+    }
+
     func reload() {
         guard authorization == .granted else { return }
         let start = Date()
@@ -137,7 +146,7 @@ final class CalendarStore: ObservableObject {
             .prefix(horizon.limit)
             .map { event in
                 MeetingSummary(
-                    id: event.eventIdentifier ?? UUID().uuidString,
+                    id: Self.occurrenceID(identifier: event.eventIdentifier, start: event.startDate),
                     title: event.title ?? "Без названия",
                     start: event.startDate,
                     end: event.endDate,
